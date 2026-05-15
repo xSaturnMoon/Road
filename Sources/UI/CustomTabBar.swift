@@ -24,7 +24,7 @@ struct CustomTabBar: View {
             HStack(spacing: 0) {
                 ForEach(Tab.allCases, id: \.self) { tab in
                     Button(action: {
-                        withAnimation(.spring()) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                             selectedTab = tab
                             showSettings = false
                         }
@@ -35,33 +35,43 @@ struct CustomTabBar: View {
                             Text(tab.rawValue)
                                 .font(.system(size: 10, weight: .medium))
                         }
-                        .foregroundColor(selectedTab == tab && !showSettings ? .white : .gray)
+                        .foregroundColor(selectedTab == tab && !showSettings ? .white : .white.opacity(0.5))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                     }
                 }
             }
             .frame(maxWidth: 280)
-            .background(.ultraThinMaterial)
-            .environment(\.colorScheme, .dark) // Force dark glass effect
+            .background(.thinMaterial)
+            .environment(\.colorScheme, .dark)
             .clipShape(Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+            )
+            .shadow(color: Color.black.opacity(0.25), radius: 15, x: 0, y: 8)
             
             // Settings Button
             Button(action: {
-                withAnimation(.spring()) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                     showSettings = true
                 }
             }) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 22, weight: .medium))
-                    .foregroundColor(showSettings ? .white : .gray)
+                    .foregroundColor(showSettings ? .white : .white.opacity(0.5))
                     .frame(width: 60, height: 60)
-                    .background(.ultraThinMaterial)
+                    .background(.thinMaterial)
                     .environment(\.colorScheme, .dark)
                     .clipShape(Circle())
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
+                    )
+                    .shadow(color: Color.black.opacity(0.25), radius: 15, x: 0, y: 8)
             }
         }
         .padding(.horizontal)
-        .padding(.bottom, 8)
+        .padding(.bottom, 16)
     }
 }
