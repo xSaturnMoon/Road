@@ -24,7 +24,7 @@ struct CustomTabBar: View {
             HStack(spacing: 0) {
                 ForEach(Tab.allCases, id: \.self) { tab in
                     Button(action: {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                             selectedTab = tab
                             showSettings = false
                         }
@@ -35,43 +35,70 @@ struct CustomTabBar: View {
                             Text(tab.rawValue)
                                 .font(.system(size: 10, weight: .medium))
                         }
-                        .foregroundColor(selectedTab == tab && !showSettings ? .white : .white.opacity(0.5))
+                        .foregroundColor(selectedTab == tab && !showSettings ? Color(white: 0.9) : Color.white.opacity(0.4))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
                     }
                 }
             }
             .frame(maxWidth: 280)
-            .background(.thinMaterial)
-            .environment(\.colorScheme, .dark)
-            .clipShape(Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
-            )
-            .shadow(color: Color.black.opacity(0.25), radius: 15, x: 0, y: 8)
+            .modifier(CapsuleGlass())
             
             // Settings Button
             Button(action: {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                     showSettings = true
                 }
             }) {
                 Image(systemName: "gearshape")
                     .font(.system(size: 22, weight: .medium))
-                    .foregroundColor(showSettings ? .white : .white.opacity(0.5))
+                    .foregroundColor(showSettings ? Color(white: 0.9) : Color.white.opacity(0.4))
                     .frame(width: 60, height: 60)
-                    .background(.thinMaterial)
-                    .environment(\.colorScheme, .dark)
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(0.15), lineWidth: 0.5)
-                    )
-                    .shadow(color: Color.black.opacity(0.25), radius: 15, x: 0, y: 8)
+                    .modifier(CircleGlass())
             }
         }
         .padding(.horizontal)
         .padding(.bottom, 16)
+    }
+}
+
+// MARK: - Official Glass Modifiers (from Lapis/iStore)
+struct CapsuleGlass: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                Capsule()
+                    .fill(.ultraThinMaterial)
+                    .opacity(0.7)
+            )
+            .background(
+                Capsule()
+                    .fill(Color.white.opacity(0.06))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .environment(\.colorScheme, .dark)
+    }
+}
+
+struct CircleGlass: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .background(
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .opacity(0.7)
+            )
+            .background(
+                Circle()
+                    .fill(Color.white.opacity(0.06))
+            )
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+            )
+            .environment(\.colorScheme, .dark)
     }
 }
