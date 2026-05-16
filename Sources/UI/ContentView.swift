@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject var appManager = AppManager.shared
     @State private var showingAuth = false
     @State private var hasCheckedAuth = false
 
@@ -24,7 +25,6 @@ struct ContentView: View {
                     .tag(3)
             }
             .tint(.blue)
-        }
         }
         .fullScreenCover(isPresented: $showingAuth) {
             AuthView(isPresented: $showingAuth, isOptional: false)
