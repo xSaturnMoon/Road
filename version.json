@@ -1,4 +1,4 @@
 {
-    "version": "1.2.10",
-    "notes": "Revert dynamic backgrounds to system dark/light theme. Fix jumping UI on day tap. Fix close button in weather details. Show moon icon at night instead of sun."
+    "version": "1.2.11",
+    "notes": "Redesign Calendar UI. Add today button. Move add event button to day cards. Remove notifications from event creation and add to event edit. Add active border to current day. Change header background."
 }

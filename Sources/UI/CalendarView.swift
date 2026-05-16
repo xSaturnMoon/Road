@@ -6,6 +6,7 @@ struct CalendarView: View {
     @State private var showingAllReminders = false
     @State private var selectedEvent: BloomEvent?
     @State private var currentMonth = Date()
+    @State private var selectedAddDate = Date()
     
     var body: some View {
         NavigationStack {
@@ -27,17 +28,19 @@ struct CalendarView: View {
                         }
                     }
                     .padding()
-                    .background(.ultraThinMaterial)
+                    .background(Color(uiColor: .systemBackground))
                     
                     // Agenda List with Card Aesthetic
                     List {
                         let days = daysInMonth(for: currentMonth)
                         ForEach(days, id: \.self) { date in
-                            DayCardRow(date: date, selectedEvent: $selectedEvent)
+                            DayCardRow(date: date, selectedEvent: $selectedEvent, showingAddEvent: $showingAddEvent, selectedAddDate: $selectedAddDate)
                         }
                     }
                     .listStyle(.plain)
                     .background(Color.clear)
+                    .id(currentMonth)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 }
             }
             .navigationTitle("Calendario")
@@ -49,13 +52,15 @@ struct CalendarView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { showingAddEvent = true } label: {
-                        Image(systemName: "plus").font(.headline)
+                    Button {
+                        withAnimation { currentMonth = Date() }
+                    } label: {
+                        Text("Oggi").bold()
                     }
                 }
             }
             .sheet(isPresented: $showingAddEvent) {
-                AddEventView(isPresented: $showingAddEvent, initialDate: currentMonth)
+                AddEventView(isPresented: $showingAddEvent, initialDate: selectedAddDate)
             }
             .sheet(item: $selectedEvent) { event in
                 EditEventView(event: event)
@@ -85,6 +90,8 @@ struct CalendarView: View {
 struct DayCardRow: View {
     let date: Date
     @Binding var selectedEvent: BloomEvent?
+    @Binding var showingAddEvent: Bool
+    @Binding var selectedAddDate: Date
     @StateObject var manager = CalendarManager.shared
     
     var body: some View {
@@ -103,9 +110,6 @@ struct DayCardRow: View {
                         .font(.title3.bold())
                 }
                 Spacer()
-                if isToday {
-                    Text("OGGI").font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 4).background(.blue).foregroundColor(.white).clipShape(Capsule())
-                }
             }
             .padding(.bottom, 12)
             
@@ -128,10 +132,27 @@ struct DayCardRow: View {
                     }
                 }
             }
+            
+            HStack {
+                Spacer()
+                Button {
+                    selectedAddDate = date
+                    showingAddEvent = true
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.blue)
+                }
+                .padding(.top, 10)
+            }
         }
         .padding()
         .background(Color(uiColor: .secondarySystemGroupedBackground))
         .clipShape(RoundedRectangle(cornerRadius: 20))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(isToday ? Color.blue : Color.clear, lineWidth: isToday ? 1.5 : 0)
+        )
         .padding(.horizontal)
         .padding(.vertical, 8)
         .listRowInsets(EdgeInsets())
@@ -189,6 +210,10 @@ struct EditEventView: View {
     @State private var date: Date
     @State private var startTime: Date
     @State private var reminderEnabled: Bool
+    @State private var reminderTime: Date
+    @State private var reminderSound: String
+    
+    let soundOptions = ["Predefinito", "Tri-tono", "Nota", "Aurora", "Basso"]
     
     init(event: BloomEvent) {
         self._event = State(initialValue: event)
@@ -196,6 +221,8 @@ struct EditEventView: View {
         self._date = State(initialValue: event.date)
         self._startTime = State(initialValue: event.startTime)
         self._reminderEnabled = State(initialValue: event.reminderId != nil)
+        self._reminderTime = State(initialValue: event.reminderTime ?? event.startTime)
+        self._reminderSound = State(initialValue: event.reminderSound ?? "Predefinito")
     }
     
     var body: some View {
@@ -209,7 +236,15 @@ struct EditEventView: View {
                     DatePicker("Orario", selection: $startTime, displayedComponents: .hourAndMinute)
                 }
                 Section("Notifiche") {
-                    Toggle("Avvisami con un suono", isOn: $reminderEnabled)
+                    Toggle("Attiva Notifica", isOn: $reminderEnabled)
+                    if reminderEnabled {
+                        DatePicker("Orario Notifica", selection: $reminderTime, displayedComponents: .hourAndMinute)
+                        Picker("Suono", selection: $reminderSound) {
+                            ForEach(soundOptions, id: \.self) { sound in
+                                Text(sound).tag(sound)
+                            }
+                        }
+                    }
                 }
                 Section {
                     Button(role: .destructive) {
@@ -226,8 +261,17 @@ struct EditEventView: View {
                 ToolbarItem(placement: .navigationBarLeading) { Button("Annulla") { dismiss() } }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Salva") {
-                        CalendarManager.shared.deleteEvent(event)
-                        CalendarManager.shared.addEvent(title: title, date: date, startTime: startTime, endTime: nil, hasEndTime: false, reminderEnabled: reminderEnabled)
+                        event.title = title
+                        event.date = date
+                        event.startTime = startTime
+                        if reminderEnabled {
+                            event.reminderTime = reminderTime
+                            event.reminderSound = reminderSound
+                        } else {
+                            event.reminderTime = nil
+                            event.reminderSound = nil
+                        }
+                        CalendarManager.shared.updateEvent(event)
                         dismiss()
                     }
                     .disabled(title.isEmpty)
@@ -278,14 +322,20 @@ struct AddEventView: View {
     @Binding var isPresented: Bool
     let initialDate: Date
     @State private var title = ""
-    @State private var date: Date
-    @State private var startTime = Date()
-    @State private var reminderEnabled = true
+    @State private var startTime: Date
     
     init(isPresented: Binding<Bool>, initialDate: Date) {
         self._isPresented = isPresented
         self.initialDate = initialDate
-        self._date = State(initialValue: initialDate)
+        
+        let now = Date()
+        let cal = Calendar.current
+        var comps = cal.dateComponents([.year, .month, .day], from: initialDate)
+        let nowComps = cal.dateComponents([.hour, .minute], from: now)
+        comps.hour = nowComps.hour
+        comps.minute = nowComps.minute
+        
+        self._startTime = State(initialValue: cal.date(from: comps) ?? initialDate)
     }
     
     var body: some View {
@@ -294,12 +344,8 @@ struct AddEventView: View {
                 Section("Cosa") {
                     TextField("Esempio: Visita medica", text: $title)
                 }
-                Section("Quando") {
-                    DatePicker("Giorno", selection: $date, displayedComponents: .date)
+                Section("Quando (\(initialDate.formatted(.dateTime.day().month(.wide).locale(Locale(identifier: "it_IT")))))") {
                     DatePicker("Orario", selection: $startTime, displayedComponents: .hourAndMinute)
-                }
-                Section("Notifiche") {
-                    Toggle("Avvisami con un suono", isOn: $reminderEnabled)
                 }
             }
             .navigationTitle("Aggiungi Impegno")
@@ -308,7 +354,7 @@ struct AddEventView: View {
                 ToolbarItem(placement: .navigationBarLeading) { Button("Annulla") { isPresented = false } }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Salva") {
-                        CalendarManager.shared.addEvent(title: title, date: date, startTime: startTime, endTime: nil, hasEndTime: false, reminderEnabled: reminderEnabled)
+                        CalendarManager.shared.addEvent(title: title, date: initialDate, startTime: startTime, endTime: nil, hasEndTime: false, reminderEnabled: false)
                         isPresented = false
                     }
                     .disabled(title.isEmpty)

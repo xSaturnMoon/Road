@@ -11,6 +11,8 @@ struct BloomEvent: Identifiable, Codable {
     var hasEndTime: Bool = false
     var isCompleted: Bool = false
     var reminderId: String?
+    var reminderTime: Date?
+    var reminderSound: String? = "Predefinito"
 }
 
 class CalendarManager: ObservableObject {
@@ -49,13 +51,15 @@ class CalendarManager: ObservableObject {
 
     // MARK: - CRUD (Local + Cloud)
 
-    func addEvent(title: String, date: Date, startTime: Date, endTime: Date?, hasEndTime: Bool, reminderEnabled: Bool) {
+    func addEvent(title: String, date: Date, startTime: Date, endTime: Date?, hasEndTime: Bool, reminderEnabled: Bool, reminderTime: Date? = nil, reminderSound: String? = "Predefinito") {
         var newEvent = BloomEvent(
             title: title,
             date: date,
             startTime: startTime,
             endTime: hasEndTime ? endTime : nil,
-            hasEndTime: hasEndTime
+            hasEndTime: hasEndTime,
+            reminderTime: reminderTime,
+            reminderSound: reminderSound
         )
         if reminderEnabled {
             scheduleNotification(for: &newEvent)
@@ -63,6 +67,27 @@ class CalendarManager: ObservableObject {
         events.append(newEvent)
         saveLocalEvents()
         syncToCloud(newEvent)
+    }
+
+    func updateEvent(_ event: BloomEvent) {
+        if let index = events.firstIndex(where: { $0.id == event.id }) {
+            // Rimuovi la vecchia notifica se esiste
+            if let rid = events[index].reminderId {
+                UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [rid])
+            }
+            
+            var updatedEvent = event
+            // Se l'utente ha impostato un reminderTime, programmiamo la notifica
+            if updatedEvent.reminderTime != nil {
+                scheduleNotification(for: &updatedEvent)
+            } else {
+                updatedEvent.reminderId = nil
+            }
+            
+            events[index] = updatedEvent
+            saveLocalEvents()
+            syncToCloud(updatedEvent)
+        }
     }
 
     func deleteEvent(_ event: BloomEvent) {
@@ -99,11 +124,14 @@ class CalendarManager: ObservableObject {
         let content = UNMutableNotificationContent()
         content.title = "Promemoria Bloom"
         content.body = "\(event.title) alle \(event.startTime.formatted(.dateTime.hour().minute()))"
+        
+        // I suoni di sistema richiedono i file .caf nel bundle. Fallback su default.
         content.sound = .default
 
         let cal = Calendar.current
+        let targetTime = event.reminderTime ?? event.startTime
         var components = cal.dateComponents([.year, .month, .day], from: event.date)
-        let time = cal.dateComponents([.hour, .minute], from: event.startTime)
+        let time = cal.dateComponents([.hour, .minute], from: targetTime)
         components.hour = time.hour
         components.minute = time.minute
 
