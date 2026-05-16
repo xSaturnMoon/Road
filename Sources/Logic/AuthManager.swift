@@ -48,7 +48,7 @@ class AuthManager: ObservableObject {
     }
     
     func performInitialSync() {
-        guard let user = currentUser else { return }
+        guard currentUser != nil else { return }
         isSyncing = true
         
         // Simulate cloud fetch
