@@ -31,16 +31,30 @@ struct CalendarView: View {
                     .background(Color(uiColor: .systemBackground))
                     
                     // Agenda List with Card Aesthetic
-                    List {
-                        let days = daysInMonth(for: currentMonth)
-                        ForEach(days, id: \.self) { date in
-                            DayCardRow(date: date, selectedEvent: $selectedEvent, showingAddEvent: $showingAddEvent, selectedAddDate: $selectedAddDate)
+                    ScrollViewReader { proxy in
+                        List {
+                            let days = daysInMonth(for: currentMonth)
+                            ForEach(days, id: \.self) { date in
+                                DayCardRow(date: date, selectedEvent: $selectedEvent, showingAddEvent: $showingAddEvent, selectedAddDate: $selectedAddDate)
+                                    .id(Calendar.current.startOfDay(for: date))
+                            }
+                        }
+                        .listStyle(.plain)
+                        .background(Color.clear)
+                        .id(currentMonth) // Force re-render on month change for animation
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        .onChange(of: currentMonth) { _, newMonth in
+                            let now = Date()
+                            if Calendar.current.isDate(now, equalTo: newMonth, toGranularity: .month) {
+                                let todayId = Calendar.current.startOfDay(for: now)
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    withAnimation {
+                                        proxy.scrollTo(todayId, anchor: .top)
+                                    }
+                                }
+                            }
                         }
                     }
-                    .listStyle(.plain)
-                    .background(Color.clear)
-                    .id(currentMonth)
-                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 }
             }
             .navigationTitle("Calendario")
