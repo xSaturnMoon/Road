@@ -4,9 +4,9 @@ struct ShoppingView: View {
     @StateObject var manager = ShoppingManager.shared
     @State private var showingAddItem = false
     @State private var showingShare = false
+    @State private var showingFriendsLists = false
     @State private var newItemName = ""
     @State private var newItemQty = ""
-    @State private var newItemImageURL = ""
     
     var body: some View {
         NavigationStack {
@@ -52,11 +52,17 @@ struct ShoppingView: View {
             .navigationTitle("Spesa")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack {
+                    HStack(spacing: 15) {
+                        Button {
+                            showingFriendsLists.toggle()
+                        } label: {
+                            Image(systemName: "folder.badge.person.crop")
+                        }
+                        
                         Button {
                             showingShare.toggle()
                         } label: {
-                            Image(systemName: "person.2.fill")
+                            Image(systemName: "person.badge.plus")
                         }
                         
                         Button {
@@ -73,6 +79,9 @@ struct ShoppingView: View {
             }
             .sheet(isPresented: $showingShare) {
                 ShareView(isPresented: $showingShare)
+            }
+            .sheet(isPresented: $showingFriendsLists) {
+                FriendsListView(isPresented: $showingFriendsLists)
             }
         }
     }
@@ -102,34 +111,6 @@ struct ShoppingItemCard: View {
     
     var body: some View {
         HStack(spacing: 15) {
-            // Product Image
-            if let urlString = item.imageURL, let url = URL(string: urlString) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image.resizable()
-                            .aspectRatio(contentMode: .fill)
-                    case .failure(_):
-                        Image(systemName: "photo")
-                            .foregroundStyle(.secondary)
-                    case .empty:
-                        ProgressView()
-                    @unknown default:
-                        EmptyView()
-                    }
-                }
-                .frame(width: 50, height: 50)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
-            } else {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(.blue.opacity(0.1))
-                        .frame(width: 50, height: 50)
-                    Image(systemName: "cart.fill")
-                        .foregroundStyle(.blue.opacity(0.5))
-                }
-            }
-            
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.name)
                     .font(.headline)
@@ -160,7 +141,7 @@ struct ShoppingItemCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 18))
         .overlay(
             RoundedRectangle(cornerRadius: 18)
-                .stroke(.white.opacity(0.2), lineWidth: 1)
+                .stroke(.white.opacity(0.1), lineWidth: 1)
         )
         .contextMenu {
             Button(role: .destructive) {
@@ -178,7 +159,6 @@ struct AddItemView: View {
     @Binding var isPresented: Bool
     @State private var name = ""
     @State private var qty = ""
-    @State private var imageURL = ""
     @ObservedObject var manager = ShoppingManager.shared
     
     var body: some View {
@@ -244,58 +224,6 @@ struct ShareView: View {
                     }
                     .disabled(friendCode.isEmpty || friendName.isEmpty)
                 }
-                
-                Section("Amici") {
-                    ForEach(manager.friends) { friend in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(friend.name)
-                                    .font(.headline)
-                                Text(friend.code)
-                                    .font(.caption.monospaced())
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if manager.observingFriend?.id == friend.id {
-                                Text("In visione")
-                                    .font(.caption)
-                                    .padding(6)
-                                    .background(.blue.opacity(0.1))
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            manager.observingFriend = friend
-                        }
-                    }
-                }
-                
-                if let friend = manager.observingFriend {
-                    Section("Spesa di \(friend.name)") {
-                        if manager.observingItems.isEmpty {
-                            Text("Nessun dato o caricamento...")
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(manager.observingItems) { item in
-                                HStack {
-                                    Image(systemName: item.isChecked ? "checkmark.circle.fill" : "circle")
-                                        .foregroundColor(item.isChecked ? .green : .secondary)
-                                    Text(item.name)
-                                    Spacer()
-                                    Text(item.quantity)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        
-                        Button("Smetti di osservare", role: .destructive) {
-                            manager.observingFriend = nil
-                            manager.observingItems = []
-                        }
-                    }
-                }
             }
             .navigationTitle("Condivisione")
             .navigationBarTitleDisplayMode(.inline)
@@ -304,6 +232,116 @@ struct ShareView: View {
                     Button("Chiudi") { isPresented = false }
                 }
             }
+        }
+    }
+}
+
+struct FriendsListView: View {
+    @Binding var isPresented: Bool
+    @ObservedObject var manager = ShoppingManager.shared
+    @State private var editingFriend: Friend?
+    @State private var newName = ""
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                if manager.friends.isEmpty {
+                    Section {
+                        Text("Non hai ancora aggiunto amici.")
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    ForEach(manager.friends) { friend in
+                        NavigationLink {
+                            FriendDetailView(friend: friend)
+                        } label: {
+                            HStack {
+                                Image(systemName: "person.circle.fill")
+                                    .foregroundColor(.blue)
+                                    .font(.title2)
+                                
+                                VStack(alignment: .leading) {
+                                    Text(friend.name)
+                                        .font(.headline)
+                                    Text(friend.code)
+                                        .font(.caption.monospaced())
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                manager.friends.removeAll(where: { $0.id == friend.id })
+                                manager.saveFriends()
+                            } label: {
+                                Label("Elimina", systemImage: "trash")
+                            }
+                            
+                            Button {
+                                editingFriend = friend
+                                newName = friend.name
+                            } label: {
+                                Label("Rinomina", systemImage: "pencil")
+                            }
+                            .tint(.orange)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Liste Amici")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Chiudi") { isPresented = false }
+                }
+            }
+            .alert("Rinomina Amico", isPresented: Binding(get: { editingFriend != nil }, set: { if !$0 { editingFriend = nil } })) {
+                TextField("Nuovo nome", text: $newName)
+                Button("Annulla", role: .cancel) { editingFriend = nil }
+                Button("Salva") {
+                    if let friend = editingFriend, !newName.isEmpty {
+                        if let index = manager.friends.firstIndex(where: { $0.id == friend.id }) {
+                            manager.friends[index].name = newName
+                            manager.saveFriends()
+                        }
+                    }
+                    editingFriend = nil
+                }
+            }
+        }
+    }
+}
+
+struct FriendDetailView: View {
+    let friend: Friend
+    @ObservedObject var manager = ShoppingManager.shared
+    
+    var body: some View {
+        List {
+            if manager.observingItems.isEmpty {
+                Text("In caricamento o lista vuota...")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(manager.observingItems) { item in
+                    HStack {
+                        Image(systemName: item.isChecked ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(item.isChecked ? .green : .secondary)
+                        Text(item.name)
+                        Spacer()
+                        Text(item.quantity)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .navigationTitle(friend.name)
+        .onAppear {
+            manager.observingFriend = friend
+        }
+        .onDisappear {
+            manager.observingFriend = nil
+            manager.observingItems = []
         }
     }
 }

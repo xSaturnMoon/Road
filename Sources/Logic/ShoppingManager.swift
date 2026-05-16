@@ -56,43 +56,9 @@ class ShoppingManager: ObservableObject {
     }
     
     func addItem(name: String, quantity: String) {
-        let newItem = ShoppingItem(name: name, quantity: quantity, imageURL: nil)
+        let newItem = ShoppingItem(name: name, quantity: quantity)
         items.insert(newItem, at: 0)
         saveItems()
-        
-        // Fetch exact image asynchronously
-        fetchProductImage(for: newItem)
-    }
-    
-    private func fetchProductImage(for item: ShoppingItem) {
-        let query = item.name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-        let url = URL(string: "https://world.openfoodfacts.org/cgi/search.pl?search_terms=\(query)&search_simple=1&action=process&json=1")!
-        
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
-            guard let data = data,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let products = json["products"] as? [[String: Any]],
-                  let firstProduct = products.first,
-                  let imageURL = firstProduct["image_url"] as? String else {
-                
-                // Fallback to general search if OFF doesn't have it
-                DispatchQueue.main.async {
-                    self?.updateItemImage(id: item.id, url: ShoppingItem.randomPlaceholderImage(for: item.name))
-                }
-                return
-            }
-            
-            DispatchQueue.main.async {
-                self?.updateItemImage(id: item.id, url: imageURL)
-            }
-        }.resume()
-    }
-    
-    private func updateItemImage(id: UUID, url: String) {
-        if let index = items.firstIndex(where: { $0.id == id }) {
-            items[index].imageURL = url
-            saveItems()
-        }
     }
     
     func toggleItem(_ item: ShoppingItem) {
