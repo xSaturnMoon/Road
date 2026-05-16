@@ -197,8 +197,7 @@ struct AddItemView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Salva") {
-                        let autoImage = ShoppingItem.randomPlaceholderImage(for: name)
-                        manager.addItem(name: name, quantity: qty, imageURL: autoImage)
+                        manager.addItem(name: name, quantity: qty)
                         isPresented = false
                     }
                     .disabled(name.isEmpty)
