@@ -1,4 +1,4 @@
 {
-    "version": "1.2.5",
-    "notes": "Codice amico permanente su Supabase + QR Code per aggiungere amici."
+    "version": "1.2.6",
+    "notes": "Ordinamento dinamico nella lista spesa: i prodotti completati scalano automaticamente in fondo."
 }

@@ -10,19 +10,26 @@ struct ShoppingView: View {
     @State private var showingClearAllAlert = false
     @State private var showingClearCheckedAlert = false
     
+    // Computata per separare gli elementi attivi da quelli completati
+    var activeItems: [ShoppingItem] {
+        manager.items.filter { !$0.isChecked }
+    }
+    
+    var completedItems: [ShoppingItem] {
+        manager.items.filter { $0.isChecked }
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background (Automatic solid color based on theme)
                 Color(uiColor: .systemBackground)
                     .ignoresSafeArea()
                 
                 List {
                     Section {
-                        // Quick Stats Header
                         HStack(spacing: 15) {
-                            statCard(title: "Prodotti", value: "\(manager.items.count)", icon: "bag.fill", color: .blue)
-                            statCard(title: "Completati", value: "\(manager.items.filter({$0.isChecked}).count)", icon: "checkmark.circle.fill", color: .green)
+                            statCard(title: "Da comprare", value: "\(activeItems.count)", icon: "cart.fill", color: .orange)
+                            statCard(title: "Completati", value: "\(completedItems.count)", icon: "checkmark.seal.fill", color: .green)
                         }
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
@@ -47,24 +54,65 @@ struct ShoppingView: View {
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     } else {
-                        ForEach(manager.items) { item in
-                            ShoppingItemCard(item: item)
-                                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                        // SEZIONE ATTIVI
+                        if !activeItems.isEmpty {
+                            Section {
+                                ForEach(activeItems) { item in
+                                    ShoppingItemCard(item: item)
+                                        .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                                        .listRowBackground(Color.clear)
+                                        .listRowSeparator(.hidden)
+                                        .swipeActions(edge: .trailing) {
+                                            Button(role: .destructive) {
+                                                withAnimation {
+                                                    manager.deleteItem(item)
+                                                }
+                                            } label: {
+                                                Label("Elimina", systemImage: "trash")
+                                            }
+                                        }
+                                }
+                            }
+                        }
+                        
+                        // SEZIONE COMPLETATI
+                        if !completedItems.isEmpty {
+                            Section {
+                                HStack {
+                                    Text("PRODOTTI PRESI")
+                                        .font(.caption.bold())
+                                        .foregroundStyle(.secondary)
+                                        .padding(.leading, 20)
+                                    Spacer()
+                                    Rectangle()
+                                        .frame(height: 1)
+                                        .foregroundStyle(.secondary.opacity(0.2))
+                                }
+                                .padding(.top, 20)
+                                .listRowInsets(EdgeInsets())
                                 .listRowBackground(Color.clear)
                                 .listRowSeparator(.hidden)
-                                .swipeActions(edge: .trailing) {
-                                    Button(role: .destructive) {
-                                        withAnimation {
-                                            manager.deleteItem(item)
+                                
+                                ForEach(completedItems) { item in
+                                    ShoppingItemCard(item: item)
+                                        .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                                        .listRowBackground(Color.clear)
+                                        .listRowSeparator(.hidden)
+                                        .opacity(0.6) // Effetto sfumato per i completati
+                                        .swipeActions(edge: .trailing) {
+                                            Button(role: .destructive) {
+                                                withAnimation {
+                                                    manager.deleteItem(item)
+                                                }
+                                            } label: {
+                                                Label("Elimina", systemImage: "trash")
+                                            }
                                         }
-                                    } label: {
-                                        Label("Elimina", systemImage: "trash")
-                                    }
                                 }
+                            }
                         }
                     }
                     
-                    // Spacer at the bottom
                     Section {
                         Spacer(minLength: 120)
                     }
@@ -186,7 +234,7 @@ struct ShoppingItemCard: View {
             Spacer()
             
             Button {
-                withAnimation {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     manager.toggleItem(item)
                 }
             } label: {
@@ -238,6 +286,7 @@ struct AddItemView: View {
     }
 }
 
+// MARK: - ShareView (QR Code nativo)
 struct ShareView: View {
     @Binding var isPresented: Bool
     @ObservedObject var manager = ShoppingManager.shared
@@ -322,8 +371,6 @@ struct ShareView: View {
         }
     }
 }
-
-// MARK: - QR Code Generator (CoreImage nativo, zero dipendenze)
 
 struct QRCodeView: View {
     let content: String
