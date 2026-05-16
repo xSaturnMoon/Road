@@ -1,4 +1,4 @@
 {
-    "version": "1.0.3",
-    "notes": "Ripristino swipe per eliminare eventi e aggiunta funzione di modifica impegni."
+    "version": "1.0.4",
+    "notes": "Fix errore di compilazione calendario e ripristino funzioni touch/swipe."
 }

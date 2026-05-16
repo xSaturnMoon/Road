@@ -11,7 +11,7 @@ class UpdateManager: ObservableObject {
     @Published var showUpToDateAlert = false
     @Published var downloadURL = "itms-services://?action=download-manifest&url=https://raw.githubusercontent.com/xSaturnMoon/Bloom/main/manifest.plist"
     
-    @Published var currentVersion = "1.0.3"
+    @Published var currentVersion = "1.0.4"
     
     func checkForUpdates(manual: Bool = false) {
         if isChecking { return }

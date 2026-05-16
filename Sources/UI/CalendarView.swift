@@ -4,7 +4,7 @@ struct CalendarView: View {
     @StateObject var manager = CalendarManager.shared
     @State private var showingAddEvent = false
     @State private var showingAllReminders = false
-    @State private var selectedEvent: CalendarEvent?
+    @State private var selectedEvent: BloomEvent?
     @State private var currentMonth = Date()
     
     var body: some View {
@@ -108,7 +108,7 @@ struct CalendarView: View {
 }
 
 struct EventRowView: View {
-    let event: CalendarEvent
+    let event: BloomEvent
     let onTap: () -> Void
     @StateObject var manager = CalendarManager.shared
     
@@ -148,13 +148,13 @@ struct EventRowView: View {
 
 struct EditEventView: View {
     @Environment(\.dismiss) var dismiss
-    @State var event: CalendarEvent
+    @State var event: BloomEvent
     @State private var title: String
     @State private var date: Date
     @State private var startTime: Date
     @State private var reminderEnabled: Bool
     
-    init(event: CalendarEvent) {
+    init(event: BloomEvent) {
         self._event = State(initialValue: event)
         self._title = State(initialValue: event.title)
         self._date = State(initialValue: event.date)
@@ -191,7 +191,7 @@ struct EditEventView: View {
                 ToolbarItem(placement: .navigationBarLeading) { Button("Annulla") { dismiss() } }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Salva") {
-                        CalendarManager.shared.deleteEvent(event) // Delete old and add new as a simple "edit"
+                        CalendarManager.shared.deleteEvent(event)
                         CalendarManager.shared.addEvent(title: title, date: date, startTime: startTime, endTime: nil, hasEndTime: false, reminderEnabled: reminderEnabled)
                         dismiss()
                     }
@@ -202,7 +202,6 @@ struct EditEventView: View {
     }
 }
 
-// Keeping AddEventView and AllRemindersView from previous turn but ensuring consistency
 struct AllRemindersView: View {
     @Binding var isPresented: Bool
     @StateObject var manager = CalendarManager.shared
