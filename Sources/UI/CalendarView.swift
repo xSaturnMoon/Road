@@ -361,7 +361,7 @@ struct AllRemindersView: View {
     var body: some View {
         NavigationStack {
             List {
-                let futureReminders = manager.events.filter { $0.reminderId != nil && $0.date >= Calendar.current.startOfDay(for: Date()) }
+                let futureReminders = manager.events.filter { (!$0.reminders.isEmpty || $0.reminderId != nil) && $0.date >= Calendar.current.startOfDay(for: Date()) }
                     .sorted(by: { $0.date < $1.date })
                 
                 if futureReminders.isEmpty {
@@ -369,11 +369,27 @@ struct AllRemindersView: View {
                 } else {
                     ForEach(futureReminders) { event in
                         HStack {
-                            VStack(alignment: .leading) {
+                            VStack(alignment: .leading, spacing: 4) {
                                 Text(event.title).font(.headline)
-                                Text("\(event.date.formatted(.dateTime.day().month().locale(Locale(identifier: "it_IT")))) alle \(event.startTime.formatted(.dateTime.hour().minute()))")
+                                Text("\(event.date.formatted(.dateTime.day().month().locale(Locale(identifier: "it_IT"))))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                
+                                if !event.reminders.isEmpty {
+                                    ForEach(event.reminders) { reminder in
+                                        Label(reminder.time.formatted(.dateTime.hour().minute()), systemImage: "clock")
+                                            .font(.caption2.bold())
+                                            .foregroundColor(.orange)
+                                    }
+                                } else if let rt = event.reminderTime {
+                                    Label(rt.formatted(.dateTime.hour().minute()), systemImage: "clock")
+                                        .font(.caption2.bold())
+                                        .foregroundColor(.orange)
+                                } else if event.reminderId != nil {
+                                    Label(event.startTime.formatted(.dateTime.hour().minute()), systemImage: "clock")
+                                        .font(.caption2.bold())
+                                        .foregroundColor(.orange)
+                                }
                             }
                             Spacer()
                             Image(systemName: "bell.fill").foregroundColor(.orange)

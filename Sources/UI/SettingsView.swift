@@ -121,51 +121,10 @@ struct SettingsView: View {
                     }
                 }
 
-                Section {
-                    Button {
-                        updateManager.checkForUpdates(manual: true)
-                    } label: {
-                        HStack {
-                            Label("Verifica Aggiornamenti", systemImage: "arrow.clockwise.circle")
-                                .foregroundColor(.primary)
-                            Spacer()
-                            if updateManager.isChecking {
-                                ProgressView()
-                            } else if updateManager.isUpdatePending {
-                                Text("In attesa di chiusura...")
-                                    .font(.caption)
-                                    .foregroundColor(.orange)
-                            } else {
-                                Text("v\(updateManager.currentVersion)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
             }
             .navigationTitle("Impostazioni")
-            .alert("Aggiornamento Disponibile", isPresented: $updateManager.isUpdateAvailable) {
-                Button("Annulla", role: .cancel) { }
-                Button("Installa al termine") { updateManager.prepareUpdate() }
-            } message: {
-                Text("È disponibile la versione \(updateManager.latestVersion). L'aggiornamento inizierà quando chiuderai l'app.")
-            }
-            .alert("Tutto pronto!", isPresented: $updateManager.isUpdatePending) {
-                Button("Ho capito") { }
-            } message: {
-                Text("L'aggiornamento inizierà quando tornerai alla Home screen.")
-            }
-            .alert("App Aggiornata", isPresented: $updateManager.showUpToDateAlert) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text("Stai già utilizzando l'ultima versione di Bloom.")
-            }
             .fullScreenCover(isPresented: $showingAuthModal) {
-                AuthView(isPresented: $showingAuthModal)
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
-                updateManager.triggerPendingUpdate()
+                AuthView(isPresented: $showingAuthModal, isOptional: true)
             }
         }
     }
@@ -175,6 +134,7 @@ struct SettingsView: View {
 
 struct AuthView: View {
     @Binding var isPresented: Bool
+    var isOptional: Bool = true
     @State private var isLogin = true
     @State private var email = ""
     @State private var name = ""
@@ -193,20 +153,22 @@ struct AuthView: View {
                 .ignoresSafeArea()
 
             // ── Close Button (top-right) ────────────────────────────
-            VStack {
-                HStack {
-                    Spacer()
-                    Button { isPresented = false } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.secondary)
-                            .padding(10)
-                            .background(.ultraThinMaterial, in: Circle())
+            if isOptional {
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button { isPresented = false } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.secondary)
+                                .padding(10)
+                                .background(.ultraThinMaterial, in: Circle())
+                        }
+                        .padding(.trailing, 20)
+                        .padding(.top, 16)
                     }
-                    .padding(.trailing, 20)
-                    .padding(.top, 16)
+                    Spacer()
                 }
-                Spacer()
             }
 
             // ── Glass Card ──────────────────────────────────────────
@@ -409,33 +371,27 @@ private struct BlueBackground: View {
         ZStack {
             // Base color
             (cs == .dark
-             ? Color(hex: "090E1A")   // midnight navy
-             : Color(hex: "EEF4FF")   // ice blue
+             ? Color.black
+             : Color(hex: "EEF4FF")
             )
 
-            // Blob 1 — deep blue
-            Circle()
-                .fill(
-                    cs == .dark
-                    ? Color(hex: "0E2A6E").opacity(0.7)
-                    : Color(hex: "BEDAFF").opacity(0.8)
-                )
-                .frame(width: 380)
-                .blur(radius: 70)
-                .offset(x: phase1 ? -80 : 80, y: phase1 ? -160 : 80)
-                .animation(.easeInOut(duration: 9).repeatForever(autoreverses: true), value: phase1)
+            if cs != .dark {
+                // Blob 1
+                Circle()
+                    .fill(Color(hex: "BEDAFF").opacity(0.8))
+                    .frame(width: 380)
+                    .blur(radius: 70)
+                    .offset(x: phase1 ? -80 : 80, y: phase1 ? -160 : 80)
+                    .animation(.easeInOut(duration: 9).repeatForever(autoreverses: true), value: phase1)
 
-            // Blob 2 — indigo
-            Circle()
-                .fill(
-                    cs == .dark
-                    ? Color(hex: "1A3A8F").opacity(0.5)
-                    : Color(hex: "A8C8FF").opacity(0.6)
-                )
-                .frame(width: 320)
-                .blur(radius: 60)
-                .offset(x: phase2 ? 100 : -120, y: phase2 ? 200 : -120)
-                .animation(.easeInOut(duration: 11).repeatForever(autoreverses: true), value: phase2)
+                // Blob 2
+                Circle()
+                    .fill(Color(hex: "A8C8FF").opacity(0.6))
+                    .frame(width: 320)
+                    .blur(radius: 60)
+                    .offset(x: phase2 ? 100 : -120, y: phase2 ? 200 : -120)
+                    .animation(.easeInOut(duration: 11).repeatForever(autoreverses: true), value: phase2)
+            }
         }
         .ignoresSafeArea()
         .onAppear {

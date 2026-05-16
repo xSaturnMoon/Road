@@ -1,10 +1,8 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject var appManager = AppManager.shared
-    @StateObject var updateManager = UpdateManager.shared
-    
     @State private var showingAuth = false
+    @State private var hasCheckedAuth = false
 
     var body: some View {
         ZStack {
@@ -27,28 +25,21 @@ struct ContentView: View {
             }
             .tint(.blue)
         }
-        .alert("Aggiornamento Disponibile", isPresented: $updateManager.isUpdateAvailable) {
-            Button("Scarica Ora") {
-                if let url = URL(string: updateManager.downloadURL) {
-                    UIApplication.shared.open(url)
-                }
-            }
-            Button("Più Tardi", role: .cancel) { }
-        } message: {
-            Text("È disponibile la versione \(updateManager.latestVersion). Vuoi installarla ora per ricevere le ultime novità?")
         }
         .fullScreenCover(isPresented: $showingAuth) {
-            AuthView(isPresented: $showingAuth)
+            AuthView(isPresented: $showingAuth, isOptional: false)
                 .interactiveDismissDisabled() // Prevent swipe to dismiss
         }
         .onAppear {
-            updateManager.checkForUpdates()
-            if !AuthManager.shared.isLoggedIn {
-                showingAuth = true
+            if !hasCheckedAuth {
+                hasCheckedAuth = true
+                if AuthManager.shared.currentUser == nil {
+                    showingAuth = true
+                }
             }
         }
-        .onChange(of: AuthManager.shared.isLoggedIn) { _, loggedIn in
-            if !loggedIn {
+        .onChange(of: AuthManager.shared.currentUser?.id) { _, newId in
+            if newId == nil {
                 showingAuth = true
             } else {
                 showingAuth = false
