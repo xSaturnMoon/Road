@@ -2,52 +2,52 @@ import SwiftUI
 
 struct CalendarView: View {
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.clear.ignoresSafeArea()
-                Text("Calendario").font(.largeTitle).foregroundColor(.white)
-            }
-            .navigationTitle("Calendario")
-            .toolbarBackground(.hidden, for: .navigationBar)
+        VStack {
+            Spacer()
+            Text("Calendario")
+                .font(.system(size: 40, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.8))
+                .shadow(radius: 10)
+            Spacer()
         }
     }
 }
 
 struct ShoppingView: View {
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.clear.ignoresSafeArea()
-                Text("Spesa").font(.largeTitle).foregroundColor(.white)
-            }
-            .navigationTitle("Spesa")
-            .toolbarBackground(.hidden, for: .navigationBar)
+        VStack {
+            Spacer()
+            Text("Spesa")
+                .font(.system(size: 40, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.8))
+                .shadow(radius: 10)
+            Spacer()
         }
     }
 }
 
 struct WeatherView: View {
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.clear.ignoresSafeArea()
-                Text("Meteo").font(.largeTitle).foregroundColor(.white)
-            }
-            .navigationTitle("Meteo")
-            .toolbarBackground(.hidden, for: .navigationBar)
+        VStack {
+            Spacer()
+            Text("Meteo")
+                .font(.system(size: 40, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.8))
+                .shadow(radius: 10)
+            Spacer()
         }
     }
 }
 
 struct SettingsView: View {
     var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.clear.ignoresSafeArea()
-                Text("Impostazioni").font(.largeTitle).foregroundColor(.white)
-            }
-            .navigationTitle("Impostazioni")
-            .toolbarBackground(.hidden, for: .navigationBar)
+        VStack {
+            Spacer()
+            Text("Impostazioni")
+                .font(.system(size: 40, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.8))
+                .shadow(radius: 10)
+            Spacer()
         }
     }
 }
