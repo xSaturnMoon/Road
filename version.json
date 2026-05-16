@@ -1,4 +1,4 @@
 {
-    "version": "1.1.1",
-    "notes": "Risolto bug di compilazione animazioni. Supporto completo Smart Background Update."
+    "version": "1.2.0",
+    "notes": "Integrazione Supabase: account reali con dati sincronizzati nel cloud."
 }

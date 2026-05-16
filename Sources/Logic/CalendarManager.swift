@@ -15,85 +15,112 @@ struct BloomEvent: Identifiable, Codable {
 
 class CalendarManager: ObservableObject {
     static let shared = CalendarManager()
-    
+
     @Published var events: [BloomEvent] = []
-    
+
     private let eventsKey = "bloom_calendar_events"
-    
+    private let sb = SupabaseManager.shared
+
     init() {
-        loadEvents()
+        loadLocalEvents()
         requestNotificationPermission()
     }
-    
-    func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
-    }
-    
-    func loadEvents() {
+
+    // MARK: - Local Persistence
+
+    func loadLocalEvents() {
         if let data = UserDefaults.standard.data(forKey: eventsKey),
            let decoded = try? JSONDecoder().decode([BloomEvent].self, from: data) {
             self.events = decoded
         }
     }
-    
-    func saveEvents() {
+
+    private func saveLocalEvents() {
         if let encoded = try? JSONEncoder().encode(events) {
             UserDefaults.standard.set(encoded, forKey: eventsKey)
         }
     }
-    
+
+    /// Called after login to replace local data with cloud data
+    func replaceWithCloudData(_ cloudEvents: [BloomEvent]) {
+        events = cloudEvents
+        saveLocalEvents()
+    }
+
+    // MARK: - CRUD (Local + Cloud)
+
     func addEvent(title: String, date: Date, startTime: Date, endTime: Date?, hasEndTime: Bool, reminderEnabled: Bool) {
-        var newEvent = BloomEvent(title: title, date: date, startTime: startTime, endTime: hasEndTime ? endTime : nil, hasEndTime: hasEndTime)
-        
+        var newEvent = BloomEvent(
+            title: title,
+            date: date,
+            startTime: startTime,
+            endTime: hasEndTime ? endTime : nil,
+            hasEndTime: hasEndTime
+        )
         if reminderEnabled {
             scheduleNotification(for: &newEvent)
         }
-        
         events.append(newEvent)
-        saveEvents()
+        saveLocalEvents()
+        syncToCloud(newEvent)
     }
-    
-    func scheduleNotification(for event: inout BloomEvent) {
-        let content = UNMutableNotificationContent()
-        content.title = "Promemoria Bloom"
-        content.body = "Evento: \(event.title) alle \(event.startTime.formatted(.dateTime.hour().minute()))"
-        content.sound = .default
-        
-        // Combine date and time
-        let calendar = Calendar.current
-        var components = calendar.dateComponents([.year, .month, .day], from: event.date)
-        let timeComponents = calendar.dateComponents([.hour, .minute], from: event.startTime)
-        components.hour = timeComponents.hour
-        components.minute = timeComponents.minute
-        
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-        let id = UUID().uuidString
-        event.reminderId = id
-        
-        let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(request)
-    }
-    
+
     func deleteEvent(_ event: BloomEvent) {
         if let rid = event.reminderId {
             UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [rid])
         }
         events.removeAll(where: { $0.id == event.id })
-        saveEvents()
+        saveLocalEvents()
+        Task { try? await sb.deleteEvent(id: event.id) }
     }
-    
+
     func toggleComplete(_ event: BloomEvent) {
         if let index = events.firstIndex(where: { $0.id == event.id }) {
             events[index].isCompleted.toggle()
-            saveEvents()
+            saveLocalEvents()
+            syncToCloud(events[index])
         }
     }
-    
+
+    // MARK: - Cloud Sync
+
+    private func syncToCloud(_ event: BloomEvent) {
+        guard sb.isAuthenticated else { return }
+        Task { try? await sb.upsertEvent(event) }
+    }
+
+    // MARK: - Notifications
+
+    func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+    }
+
+    private func scheduleNotification(for event: inout BloomEvent) {
+        let content = UNMutableNotificationContent()
+        content.title = "Promemoria Bloom"
+        content.body = "\(event.title) alle \(event.startTime.formatted(.dateTime.hour().minute()))"
+        content.sound = .default
+
+        let cal = Calendar.current
+        var components = cal.dateComponents([.year, .month, .day], from: event.date)
+        let time = cal.dateComponents([.hour, .minute], from: event.startTime)
+        components.hour = time.hour
+        components.minute = time.minute
+
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let id = UUID().uuidString
+        event.reminderId = id
+        let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    // MARK: - Query
+
     func events(for date: Date) -> [BloomEvent] {
         events.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }
-            .sorted(by: { $0.startTime < $1.startTime })
+            .sorted { $0.startTime < $1.startTime }
     }
-    
+
     func hasEvents(on date: Date) -> Bool {
         events.contains { Calendar.current.isDate($0.date, inSameDayAs: date) }
     }
