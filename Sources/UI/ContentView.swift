@@ -4,6 +4,8 @@ struct ContentView: View {
     @StateObject var appManager = AppManager.shared
     @StateObject var updateManager = UpdateManager.shared
     
+    @State private var showingAuth = false
+
     var body: some View {
         ZStack {
             TabView(selection: $appManager.selectedTab) {
@@ -35,8 +37,22 @@ struct ContentView: View {
         } message: {
             Text("È disponibile la versione \(updateManager.latestVersion). Vuoi installarla ora per ricevere le ultime novità?")
         }
+        .fullScreenCover(isPresented: $showingAuth) {
+            AuthView(isPresented: $showingAuth)
+                .interactiveDismissDisabled() // Prevent swipe to dismiss
+        }
         .onAppear {
             updateManager.checkForUpdates()
+            if !AuthManager.shared.isLoggedIn {
+                showingAuth = true
+            }
+        }
+        .onChange(of: AuthManager.shared.isLoggedIn) { loggedIn in
+            if !loggedIn {
+                showingAuth = true
+            } else {
+                showingAuth = false
+            }
         }
     }
 }

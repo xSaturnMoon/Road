@@ -1,4 +1,4 @@
 {
-    "version": "1.2.6",
-    "notes": "Ordinamento dinamico nella lista spesa: i prodotti completati scalano automaticamente in fondo."
+    "version": "1.2.7",
+    "notes": "Force login on app start, fix weather percentages and localization, update weather daily detail view."
 }

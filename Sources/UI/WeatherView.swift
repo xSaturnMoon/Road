@@ -97,9 +97,12 @@ struct WeatherDetailPage: View {
                         .foregroundStyle(.secondary)
                         .padding(.horizontal)
                     
+                    // Mostriamo solo le prossime 24 ore a partire da adesso
+                    let upcomingHours = Array(weather.hourly.filter { $0.time >= Date() }.prefix(24))
+                    
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 25) {
-                            ForEach(weather.hourly) { hour in
+                            ForEach(upcomingHours) { hour in
                                 VStack(spacing: 8) {
                                     Text(hour.time.formatted(.dateTime.hour().locale(Locale(identifier: "it_IT"))))
                                         .font(.caption.bold())
@@ -194,7 +197,7 @@ struct WeatherDetailPage: View {
             }
         }
         .sheet(item: $selectedDay) { day in
-            DayDetailView(day: day, city: weather.city)
+            DayDetailView(day: day, city: weather.city, hourlyData: weather.hourly)
         }
     }
 }
@@ -202,11 +205,23 @@ struct WeatherDetailPage: View {
 struct DayDetailView: View {
     let day: DailyWeather
     let city: String
+    let hourlyData: [HourlyWeather]
+    
+    var hoursForDay: [HourlyWeather] {
+        hourlyData.filter { Calendar.current.isDate($0.time, inSameDayAs: day.date) }
+    }
     
     var body: some View {
         NavigationStack {
             List {
                 Section("Riepilogo") {
+                    HStack {
+                        Text("Condizione")
+                        Spacer()
+                        Text(day.description)
+                            .foregroundStyle(.secondary)
+                        WeatherIcon(condition: day.condition)
+                    }
                     HStack {
                         Text("Temperatura Massima")
                         Spacer()
@@ -224,15 +239,49 @@ struct DayDetailView: View {
                     }
                 }
                 
-                Section("Condizione") {
-                    HStack {
-                        WeatherIcon(condition: day.condition).font(.title)
-                        Text(day.condition.capitalized)
-                            .font(.headline)
+                Section("Meteo, \(day.date.formatted(.dateTime.day().month().year(.defaultDigits).locale(Locale(identifier: "it_IT"))))") {
+                    if hoursForDay.isEmpty {
+                        Text("Dati orari non disponibili.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(hoursForDay) { hour in
+                            HStack {
+                                Text(hour.time.formatted(.dateTime.hour().locale(Locale(identifier: "it_IT"))))
+                                    .font(.headline)
+                                    .frame(width: 60, alignment: .leading)
+                                
+                                WeatherIcon(condition: hour.condition)
+                                    .font(.title3)
+                                    .frame(width: 30)
+                                
+                                if hour.rainProbability > 0 {
+                                    Text("\(hour.rainProbability)%")
+                                        .font(.caption.bold())
+                                        .foregroundColor(.blue)
+                                        .frame(width: 45)
+                                } else {
+                                    Spacer().frame(width: 45)
+                                }
+                                
+                                Spacer()
+                                
+                                Text(hour.description)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                
+                                Spacer()
+                                
+                                Text("\(Int(hour.temp))°")
+                                    .font(.headline)
+                                    .frame(width: 40, alignment: .trailing)
+                            }
+                            .padding(.vertical, 4)
+                        }
                     }
                 }
             }
-            .navigationTitle(day.date.formatted(.dateTime.day().month().weekday(.wide).locale(Locale(identifier: "it_IT"))))
+            .navigationTitle(day.date.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "it_IT"))).capitalized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -240,7 +289,6 @@ struct DayDetailView: View {
                 }
             }
         }
-        .presentationDetents([.medium])
     }
 }
 

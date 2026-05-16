@@ -27,6 +27,7 @@ struct HourlyWeather: Identifiable, Codable {
     var time: Date
     var temp: Double
     var condition: String
+    var description: String
     var rainProbability: Int
 }
 
@@ -36,6 +37,7 @@ struct DailyWeather: Identifiable, Codable {
     var tempMin: Double
     var tempMax: Double
     var condition: String
+    var description: String
     var rainProbability: Int
 }
 
@@ -167,20 +169,29 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         )
         
         var hourly: [HourlyWeather] = []
-        for i in 0..<24 {
-            let time = Calendar.current.date(byAdding: .hour, value: i, to: Date())!
+        let startOfDay = Calendar.current.startOfDay(for: Date())
+        for i in 0..<res.hourly.temperature_2m.count {
+            let time = Calendar.current.date(byAdding: .hour, value: i, to: startOfDay)!
             hourly.append(HourlyWeather(
                 time: time,
                 temp: res.hourly.temperature_2m[i],
                 condition: weatherCodeToCondition(res.hourly.weather_code[i]),
+                description: weatherCodeToText(res.hourly.weather_code[i]),
                 rainProbability: res.hourly.precipitation_probability[i]
             ))
         }
         
         var daily: [DailyWeather] = []
-        for i in 0..<7 {
-            let date = Calendar.current.date(byAdding: .day, value: i, to: Date())!
-            daily.append(DailyWeather(date: date, tempMin: res.daily.temperature_2m_min[i], tempMax: res.daily.temperature_2m_max[i], condition: weatherCodeToCondition(res.daily.weather_code[i]), rainProbability: res.daily.precipitation_probability_max[i]))
+        for i in 0..<res.daily.temperature_2m_max.count {
+            let date = Calendar.current.date(byAdding: .day, value: i, to: startOfDay)!
+            daily.append(DailyWeather(
+                date: date,
+                tempMin: res.daily.temperature_2m_min[i],
+                tempMax: res.daily.temperature_2m_max[i],
+                condition: weatherCodeToCondition(res.daily.weather_code[i]),
+                description: weatherCodeToText(res.daily.weather_code[i]),
+                rainProbability: res.daily.precipitation_probability_max[i]
+            ))
         }
         
         return WeatherData(city: location.name, current: current, hourly: hourly, daily: daily)
