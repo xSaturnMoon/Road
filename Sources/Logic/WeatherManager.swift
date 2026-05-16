@@ -27,6 +27,7 @@ struct HourlyWeather: Identifiable, Codable {
     var time: Date
     var temp: Double
     var condition: String
+    var rainProbability: Int
 }
 
 struct DailyWeather: Identifiable, Codable {
@@ -134,7 +135,7 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
     
     func fetchWeather(for location: WeatherLocation) {
-        let urlString = "https://api.open-meteo.com/v1/forecast?latitude=\(location.lat)&longitude=\(location.lon)&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,pressure_msl,surface_pressure,wind_speed_10m,uv_index,visibility&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto"
+        let urlString = "https://api.open-meteo.com/v1/forecast?latitude=\(location.lat)&longitude=\(location.lon)&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,pressure_msl,surface_pressure,wind_speed_10m,uv_index,visibility&hourly=temperature_2m,weather_code,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto"
         
         guard let url = URL(string: urlString) else { return }
         
@@ -167,8 +168,13 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         
         var hourly: [HourlyWeather] = []
         for i in 0..<24 {
-            let time = Date().addingTimeInterval(TimeInterval(i * 3600))
-            hourly.append(HourlyWeather(time: time, temp: res.hourly.temperature_2m[i], condition: weatherCodeToCondition(res.hourly.weather_code[i])))
+            let time = Calendar.current.date(byAdding: .hour, value: i, to: Date())!
+            hourly.append(HourlyWeather(
+                time: time,
+                temp: res.hourly.temperature_2m[i],
+                condition: weatherCodeToCondition(res.hourly.weather_code[i]),
+                rainProbability: res.hourly.precipitation_probability[i]
+            ))
         }
         
         var daily: [DailyWeather] = []
@@ -227,6 +233,7 @@ struct CurrentData: Codable {
 struct HourlyData: Codable {
     let temperature_2m: [Double]
     let weather_code: [Int]
+    let precipitation_probability: [Int]
 }
 
 struct DailyData: Codable {
