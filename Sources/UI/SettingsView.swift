@@ -1,68 +1,80 @@
 import SwiftUI
 
+// MARK: - Settings View
+
 struct SettingsView: View {
     @StateObject var auth = AuthManager.shared
     @StateObject var updateManager = UpdateManager.shared
-    @AppStorage("isDarkMode") private var isDarkMode = false
-    @AppStorage("useSystemTheme") private var useSystemTheme = true
     @State private var showingAuthModal = false
-    
+
     var body: some View {
         NavigationStack {
             List {
                 // Profile Section
                 Section {
                     if let user = auth.currentUser {
-                        HStack(spacing: 15) {
-                            Circle()
-                                .fill(LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing))
-                                .frame(width: 60, height: 60)
-                                .overlay(
-                                    Text(user.name.prefix(1).uppercased())
-                                        .font(.title.bold())
-                                        .foregroundColor(.white)
-                                )
-                            
-                            VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 14) {
+                            ZStack {
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [Color(hex: "4F8EF7"), Color(hex: "1A5FD4")],
+                                            startPoint: .topLeading, endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 52, height: 52)
+                                Text(user.name.prefix(1).uppercased())
+                                    .font(.title2.bold())
+                                    .foregroundColor(.white)
+                            }
+                            VStack(alignment: .leading, spacing: 3) {
                                 Text(user.name)
                                     .font(.headline)
                                 Text(user.email)
-                                    .font(.subheadline)
+                                    .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
-                            
                             Spacer()
-                            
                             Button {
                                 auth.logout()
                             } label: {
-                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                Label("Esci", systemImage: "rectangle.portrait.and.arrow.right")
+                                    .font(.caption.bold())
                                     .foregroundColor(.red)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 5)
+                                    .background(Color.red.opacity(0.1))
+                                    .clipShape(Capsule())
                             }
                         }
-                        .padding(.vertical, 8)
+                        .padding(.vertical, 6)
                     } else {
                         Button {
                             showingAuthModal = true
                         } label: {
-                            HStack {
+                            HStack(spacing: 14) {
                                 Image(systemName: "person.crop.circle.badge.plus")
                                     .font(.title2)
-                                    .foregroundColor(.blue)
-                                VStack(alignment: .leading) {
+                                    .foregroundStyle(
+                                        LinearGradient(
+                                            colors: [Color(hex: "4F8EF7"), Color(hex: "1A5FD4")],
+                                            startPoint: .top, endPoint: .bottom
+                                        )
+                                    )
+                                VStack(alignment: .leading, spacing: 2) {
                                     Text("Accedi o Registrati")
                                         .font(.headline)
-                                    Text("Per non perdere mai i tuoi dati")
+                                        .foregroundColor(.primary)
+                                    Text("I tuoi dati ti seguiranno ovunque")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
                             }
+                            .padding(.vertical, 4)
                         }
-                        .padding(.vertical, 4)
                     }
                 }
-                
-                // Info Section
+
                 Section {
                     Button {
                         updateManager.checkForUpdates(manual: true)
@@ -78,11 +90,9 @@ struct SettingsView: View {
                                     .font(.caption)
                                     .foregroundColor(.orange)
                             } else {
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text("v\(updateManager.currentVersion)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
+                                Text("v\(updateManager.currentVersion)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -91,16 +101,14 @@ struct SettingsView: View {
             .navigationTitle("Impostazioni")
             .alert("Aggiornamento Disponibile", isPresented: $updateManager.isUpdateAvailable) {
                 Button("Annulla", role: .cancel) { }
-                Button("Installa al termine") {
-                    updateManager.prepareUpdate()
-                }
+                Button("Installa al termine") { updateManager.prepareUpdate() }
             } message: {
-                Text("È disponibile la versione \(updateManager.latestVersion). L'aggiornamento inizierà automaticamente quando chiuderai l'app.")
+                Text("È disponibile la versione \(updateManager.latestVersion). L'aggiornamento inizierà quando chiuderai l'app.")
             }
             .alert("Tutto pronto!", isPresented: $updateManager.isUpdatePending) {
                 Button("Ho capito") { }
             } message: {
-                Text("L'aggiornamento inizierà quando tornerai alla Home screen. A presto!")
+                Text("L'aggiornamento inizierà quando tornerai alla Home screen.")
             }
             .alert("App Aggiornata", isPresented: $updateManager.showUpToDateAlert) {
                 Button("OK", role: .cancel) { }
@@ -117,7 +125,7 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Auth View Overhaul
+// MARK: - Auth View (Glassmorphism Redesign)
 
 struct AuthView: View {
     @Binding var isPresented: Bool
@@ -127,254 +135,342 @@ struct AuthView: View {
     @State private var password = ""
     @StateObject var auth = AuthManager.shared
     @Environment(\.colorScheme) var colorScheme
-    
-    @State private var animateBg = false
-    @State private var animateForm = false
+
+    @State private var cardScale: CGFloat = 0.92
+    @State private var cardOpacity: Double = 0
     @State private var shakeOffset: CGFloat = 0
-    
+
     var body: some View {
         ZStack {
-            // MARK: - Dynamic Living Background
-            MeshBackground(animate: animateBg)
+            // ── Background ──────────────────────────────────────────
+            BlueBackground()
                 .ignoresSafeArea()
-            
-            VStack(spacing: 0) {
-                // Header Close Button
+
+            // ── Close Button (top-right) ────────────────────────────
+            VStack {
                 HStack {
                     Spacer()
-                    Button {
-                        isPresented = false
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title)
+                    Button { isPresented = false } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(.secondary)
-                            .padding()
+                            .padding(10)
+                            .background(.ultraThinMaterial, in: Circle())
                     }
+                    .padding(.trailing, 20)
+                    .padding(.top, 16)
                 }
-                
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: 35) {
-                        // Icon Section
+                Spacer()
+            }
+
+            // ── Glass Card ──────────────────────────────────────────
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    Spacer(minLength: 80)
+
+                    VStack(spacing: 28) {
+                        // Icon
                         ZStack {
                             Circle()
                                 .fill(.ultraThinMaterial)
-                                .frame(width: 120, height: 120)
-                                .shadow(color: .black.opacity(0.1), radius: 10)
-                            
-                            Image(systemName: isLogin ? "lock.shield.fill" : "person.badge.plus.fill")
-                                .font(.system(size: 50, weight: .bold))
+                                .frame(width: 88, height: 88)
+                                .overlay(
+                                    Circle().stroke(Color.white.opacity(0.25), lineWidth: 1)
+                                )
+                                .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
+
+                            Image(systemName: isLogin ? "lock.shield.fill" : "person.fill.badge.plus")
+                                .font(.system(size: 36, weight: .semibold))
                                 .foregroundStyle(
-                                    LinearGradient(colors: [.blue, .purple], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                    LinearGradient(
+                                        colors: [Color(hex: "6BAAFF"), Color(hex: "2A6FE8")],
+                                        startPoint: .top, endPoint: .bottom
+                                    )
                                 )
                                 .contentTransition(.symbolEffect(.replace))
                         }
-                        .offset(y: animateForm ? 0 : -20)
-                        .opacity(animateForm ? 1 : 0)
-                        
-                        VStack(spacing: 8) {
-                            Text(isLogin ? "Bentornato" : "Crea un Account")
-                                .font(.system(size: 34, weight: .bold, design: .rounded))
-                            
-                            Text(isLogin ? "Inserisci le tue credenziali per accedere." : "Inizia il tuo viaggio con Bloom.")
+
+                        // Titles
+                        VStack(spacing: 6) {
+                            Text(isLogin ? "Bentornato" : "Crea Account")
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundColor(.primary)
+
+                            Text(isLogin
+                                 ? "Inserisci le credenziali per accedere"
+                                 : "Registrati per sincronizzare i tuoi dati")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
                         }
-                        .offset(y: animateForm ? 0 : 20)
-                        .opacity(animateForm ? 1 : 0)
-                        
-                        // MARK: - Form
-                        VStack(spacing: 18) {
+
+                        // Form
+                        VStack(spacing: 14) {
                             if !isLogin {
-                                GlassInput(placeholder: "Nome Completo", text: $name, icon: "person.fill")
-                                    .transition(.asymmetric(insertion: .push(from: .top), removal: .move(edge: .top)).combined(with: .opacity))
+                                BloomField(
+                                    placeholder: "Nome completo",
+                                    icon: "person",
+                                    text: $name
+                                )
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .top).combined(with: .opacity),
+                                    removal: .move(edge: .top).combined(with: .opacity)
+                                ))
                             }
-                            
-                            GlassInput(placeholder: "Email", text: $email, icon: "envelope.fill")
-                                .keyboardType(.emailAddress)
-                                .autocapitalization(.none)
-                            
-                            GlassInput(placeholder: "Password", text: $password, icon: "key.fill", isSecure: true)
+
+                            BloomField(
+                                placeholder: "Email",
+                                icon: "envelope",
+                                text: $email,
+                                keyboard: .emailAddress,
+                                autocap: .none
+                            )
+
+                            BloomField(
+                                placeholder: "Password",
+                                icon: "key",
+                                text: $password,
+                                isSecure: true
+                            )
                         }
-                        .padding(.horizontal)
                         .offset(x: shakeOffset)
-                        .offset(y: animateForm ? 0 : 30)
-                        .opacity(animateForm ? 1 : 0)
-                        
+
+                        // Error message
                         if let error = auth.authError {
-                            Text(error)
-                                .font(.footnote.bold())
-                                .foregroundColor(.red)
-                                .padding(.horizontal)
-                                .padding(.vertical, 8)
-                                .background(Capsule().fill(.red.opacity(0.1)))
-                                .transition(.scale.combined(with: .opacity))
+                            HStack(spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.red)
+                                Text(error)
+                                    .foregroundColor(.red)
+                            }
+                            .font(.footnote.weight(.medium))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                            .transition(.scale(scale: 0.95).combined(with: .opacity))
                         }
-                        
-                        // MARK: - Action Button
-                        Button {
-                            triggerAuth()
-                        } label: {
-                            HStack {
+
+                        // Primary CTA
+                        Button { triggerAuth() } label: {
+                            Group {
                                 if auth.isLoading {
                                     ProgressView().tint(.white)
                                 } else {
-                                    Text(isLogin ? "Accedi" : "Registrati Ora")
-                                        .font(.headline.bold())
-                                    Image(systemName: "chevron.right")
-                                        .font(.subheadline.bold())
+                                    HStack(spacing: 8) {
+                                        Text(isLogin ? "Accedi" : "Crea Account")
+                                            .font(.system(size: 17, weight: .semibold))
+                                        Image(systemName: "arrow.right")
+                                            .font(.system(size: 15, weight: .semibold))
+                                    }
                                 }
                             }
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity)
-                            .frame(height: 60)
+                            .frame(height: 54)
                             .background(
-                                LinearGradient(colors: [.blue, .blue.opacity(0.8)], startPoint: .top, endPoint: .bottom)
+                                LinearGradient(
+                                    colors: [Color(hex: "4F8EF7"), Color(hex: "1A5FD4")],
+                                    startPoint: .topLeading, endPoint: .bottomTrailing
+                                ),
+                                in: RoundedRectangle(cornerRadius: 16)
                             )
-                            .clipShape(RoundedRectangle(cornerRadius: 20))
-                            .shadow(color: .blue.opacity(0.3), radius: 15, y: 8)
+                            .shadow(color: Color(hex: "1A5FD4").opacity(0.4), radius: 12, y: 6)
                         }
-                        .padding(.horizontal)
-                        .scaleEffect(auth.isLoading ? 0.95 : 1.0)
-                        .offset(y: animateForm ? 0 : 40)
-                        .opacity(animateForm ? 1 : 0)
-                        
-                        // Footer Toggle
+                        .disabled(auth.isLoading || email.isEmpty || password.isEmpty)
+                        .opacity((auth.isLoading || email.isEmpty || password.isEmpty) ? 0.6 : 1)
+                        .scaleEffect(auth.isLoading ? 0.97 : 1.0)
+                        .animation(.spring(response: 0.3), value: auth.isLoading)
+
+                        // Toggle login/register
                         Button {
-                            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                            withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
                                 isLogin.toggle()
                                 auth.authError = nil
                             }
                         } label: {
                             HStack(spacing: 4) {
-                                Text(isLogin ? "Nuovo su Bloom?" : "Hai già un account?")
+                                Text(isLogin ? "Non hai un account?" : "Hai già un account?")
                                     .foregroundStyle(.secondary)
                                 Text(isLogin ? "Registrati" : "Accedi")
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.blue)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(Color(hex: "4F8EF7"))
                             }
                             .font(.subheadline)
                         }
-                        .padding(.top, 10)
-                        .offset(y: animateForm ? 0 : 50)
-                        .opacity(animateForm ? 1 : 0)
                     }
-                    .padding(.bottom, 50)
+                    .padding(28)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 28)
+                            .stroke(Color.white.opacity(colorScheme == .dark ? 0.12 : 0.5), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.15), radius: 30, y: 10)
+                    .padding(.horizontal, 20)
+                    .scaleEffect(cardScale)
+                    .opacity(cardOpacity)
+
+                    Spacer(minLength: 40)
                 }
             }
         }
-        .preferredColorScheme(nil) // Auto-adapt
+        .preferredColorScheme(nil)
+        .animation(.spring(response: 0.45, dampingFraction: 0.85), value: isLogin)
         .onAppear {
-            withAnimation(.linear(duration: 5).repeatForever(autoreverses: true)) {
-                animateBg.toggle()
-            }
-            withAnimation(.spring(response: 0.7, dampingFraction: 0.8).delay(0.2)) {
-                animateForm = true
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.75)) {
+                cardScale  = 1.0
+                cardOpacity = 1.0
             }
         }
         .onChange(of: auth.authError) { error in
-            if error != nil {
-                performShake()
-            }
+            if error != nil { performShake() }
         }
         .onChange(of: auth.currentUser?.id) { _ in
-            if auth.currentUser != nil { 
+            if auth.currentUser != nil {
                 withAnimation { isPresented = false }
             }
         }
     }
-    
+
     private func triggerAuth() {
+        withAnimation { auth.authError = nil }
         if isLogin {
             auth.login(email: email, password: password)
         } else {
             auth.signUp(email: email, name: name, password: password)
         }
     }
-    
+
     private func performShake() {
-        for i in 0...6 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.05) {
-                withAnimation(.spring(response: 0.1, dampingFraction: 0.2)) {
-                    shakeOffset = (i == 6) ? 0 : (i % 2 == 0 ? 10 : -10)
+        let steps: [CGFloat] = [0, 12, -12, 9, -9, 5, -5, 0]
+        for (i, offset) in steps.enumerated() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.055) {
+                withAnimation(.spring(response: 0.12, dampingFraction: 0.3)) {
+                    shakeOffset = offset
                 }
             }
         }
     }
 }
 
-// MARK: - Components
+// MARK: - Background (Solo Blu, Light/Dark adaptive)
 
-struct MeshBackground: View {
-    @State private var move1 = false
-    @State private var move2 = false
-    @Environment(\.colorScheme) var colorScheme
-    let animate: Bool
-    
+private struct BlueBackground: View {
+    @Environment(\.colorScheme) var cs
+    @State private var phase1 = false
+    @State private var phase2 = false
+
     var body: some View {
         ZStack {
-            Color(colorScheme == .dark ? .black : .white)
-            
-            // Sphere 1
+            // Base color
+            (cs == .dark
+             ? Color(hex: "090E1A")   // midnight navy
+             : Color(hex: "EEF4FF")   // ice blue
+            )
+
+            // Blob 1 — deep blue
             Circle()
-                .fill(colorScheme == .dark ? Color.blue.opacity(0.4) : Color.blue.opacity(0.2))
-                .frame(width: 400)
-                .offset(x: move1 ? -100 : 100, y: move1 ? -200 : 200)
-                .blur(radius: 80)
-            
-            // Sphere 2
+                .fill(
+                    cs == .dark
+                    ? Color(hex: "0E2A6E").opacity(0.7)
+                    : Color(hex: "BEDAFF").opacity(0.8)
+                )
+                .frame(width: 380)
+                .blur(radius: 70)
+                .offset(x: phase1 ? -80 : 80, y: phase1 ? -160 : 80)
+                .animation(.easeInOut(duration: 9).repeatForever(autoreverses: true), value: phase1)
+
+            // Blob 2 — indigo
             Circle()
-                .fill(colorScheme == .dark ? Color.purple.opacity(0.4) : Color.purple.opacity(0.2))
-                .frame(width: 450)
-                .offset(x: move2 ? 150 : -150, y: move2 ? 250 : -250)
-                .blur(radius: 90)
-            
-            Rectangle()
-                .fill(.ultraThinMaterial)
+                .fill(
+                    cs == .dark
+                    ? Color(hex: "1A3A8F").opacity(0.5)
+                    : Color(hex: "A8C8FF").opacity(0.6)
+                )
+                .frame(width: 320)
+                .blur(radius: 60)
+                .offset(x: phase2 ? 100 : -120, y: phase2 ? 200 : -120)
+                .animation(.easeInOut(duration: 11).repeatForever(autoreverses: true), value: phase2)
         }
+        .ignoresSafeArea()
         .onAppear {
-            withAnimation(.easeInOut(duration: 10).repeatForever(autoreverses: true)) {
-                move1.toggle()
-            }
-            withAnimation(.easeInOut(duration: 12).repeatForever(autoreverses: true)) {
-                move2.toggle()
-            }
+            phase1 = true
+            phase2 = true
         }
     }
 }
 
-struct GlassInput: View {
+// MARK: - Glass Text Field
+
+struct BloomField: View {
     var placeholder: String
-    @Binding var text: String
     var icon: String
+    @Binding var text: String
+    var keyboard: UIKeyboardType = .default
+    var autocap: UITextAutocapitalizationType = .sentences
     var isSecure: Bool = false
-    @FocusState private var isFocused: Bool
-    
+
+    @FocusState private var focused: Bool
+
     var body: some View {
-        HStack(spacing: 15) {
+        HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 20))
-                .foregroundColor(isFocused ? .blue : .secondary)
-                .frame(width: 30)
-                .scaleEffect(isFocused ? 1.1 : 1.0)
-            
-            if isSecure {
-                SecureField(placeholder, text: $text)
-                    .focused($isFocused)
-            } else {
-                TextField(placeholder, text: $text)
-                    .focused($isFocused)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundColor(focused ? Color(hex: "4F8EF7") : .secondary)
+                .frame(width: 24)
+                .animation(.easeInOut(duration: 0.2), value: focused)
+
+            Group {
+                if isSecure {
+                    SecureField(placeholder, text: $text)
+                        .focused($focused)
+                } else {
+                    TextField(placeholder, text: $text)
+                        .focused($focused)
+                        .keyboardType(keyboard)
+                        .autocapitalization(autocap)
+                }
             }
+            .font(.system(size: 16))
         }
-        .padding()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
         .background(
-            RoundedRectangle(cornerRadius: 22)
+            RoundedRectangle(cornerRadius: 14)
                 .fill(.ultraThinMaterial)
-                .shadow(color: .black.opacity(isFocused ? 0.05 : 0), radius: 10)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 22)
-                .stroke(isFocused ? Color.blue.opacity(0.5) : Color.white.opacity(0.2), lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(
+                    focused
+                    ? Color(hex: "4F8EF7").opacity(0.6)
+                    : Color.white.opacity(0.18),
+                    lineWidth: 1.5
+                )
         )
-        .animation(.spring(response: 0.3), value: isFocused)
+        .animation(.easeInOut(duration: 0.2), value: focused)
+    }
+}
+
+// MARK: - Color Hex Extension
+
+extension Color {
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let r, g, b: UInt64
+        switch hex.count {
+        case 6:
+            (r, g, b) = (int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (r, g, b) = (1, 1, 0)
+        }
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue: Double(b) / 255,
+            opacity: 1
+        )
     }
 }

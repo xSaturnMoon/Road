@@ -1,4 +1,45 @@
 import Foundation
+import Security
+
+// MARK: - Keychain Helper
+// I token vengono salvati nel Keychain che sopravvive ai reinstall dell'app
+
+struct KeychainHelper {
+    static func save(key: String, value: String) {
+        let data = Data(value.utf8)
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecAttrService as String: "com.bloom.app",
+            kSecValueData as String: data
+        ]
+        SecItemDelete(query as CFDictionary)
+        SecItemAdd(query as CFDictionary, nil)
+    }
+
+    static func read(key: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecAttrService as String: "com.bloom.app",
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        SecItemCopyMatching(query as CFDictionary, &result)
+        guard let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func delete(key: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecAttrService as String: "com.bloom.app"
+        ]
+        SecItemDelete(query as CFDictionary)
+    }
+}
 
 // MARK: - Supabase Response Models
 
@@ -18,16 +59,35 @@ struct SupabaseUser: Codable {
 }
 
 struct SupabaseAuthResponse: Codable {
-    let accessToken: String
-    let refreshToken: String
-    let user: SupabaseUser
+    let accessToken: String?
+    let refreshToken: String?
+    let user: SupabaseUser?
 
+    // Supabase restituisce un oggetto `user` direttamente quando la registrazione
+    // richiede conferma email (access_token sarà nil in quel caso)
     enum CodingKeys: String, CodingKey {
         case accessToken = "access_token"
         case refreshToken = "refresh_token"
         case user
     }
 }
+
+// Risposta alternativa di Supabase quando la conferma email è disabilitata
+// e la risposta è una sessione completa
+struct SupabaseSignUpResponse: Codable {
+    let id: String?
+    let email: String?
+    let userMetadata: SupabaseUser.UserMetadata?
+    let identities: [AnyCodableIgnored]?
+
+    enum CodingKeys: String, CodingKey {
+        case id, email
+        case userMetadata = "user_metadata"
+        case identities
+    }
+}
+
+struct AnyCodableIgnored: Codable {}
 
 struct SupabaseEvent: Codable {
     let id: String
@@ -129,6 +189,7 @@ enum SupabaseError: LocalizedError {
     case notAuthenticated
     case apiError(String)
     case httpError(Int)
+    case emailConfirmationRequired
 
     var errorDescription: String? {
         switch self {
@@ -136,6 +197,7 @@ enum SupabaseError: LocalizedError {
         case .notAuthenticated: return "Non sei autenticato"
         case .apiError(let msg): return msg
         case .httpError(let code): return "Errore HTTP \(code)"
+        case .emailConfirmationRequired: return "Controlla la tua email per confermare la registrazione."
         }
     }
 }
@@ -152,44 +214,76 @@ class SupabaseManager {
     private(set) var userId: String?
 
     private init() {
-        accessToken = UserDefaults.standard.string(forKey: "sb_access_token")
-        userId      = UserDefaults.standard.string(forKey: "sb_user_id")
+        // Legge dal Keychain: sopravvive ai reinstall!
+        accessToken = KeychainHelper.read(key: "sb_access_token")
+        userId      = KeychainHelper.read(key: "sb_user_id")
     }
 
     var isAuthenticated: Bool { accessToken != nil && userId != nil }
 
     // MARK: - Session helpers
 
-    private func saveSession(_ r: SupabaseAuthResponse) {
-        accessToken = r.accessToken
-        userId      = r.user.id
-        UserDefaults.standard.set(r.accessToken, forKey: "sb_access_token")
-        UserDefaults.standard.set(r.user.id,     forKey: "sb_user_id")
-        UserDefaults.standard.set(r.refreshToken, forKey: "sb_refresh_token")
+    private func saveSession(token: String, refresh: String, uid: String) {
+        accessToken = token
+        userId      = uid
+        // Keychain: dati persistenti tra reinstallazioni
+        KeychainHelper.save(key: "sb_access_token", value: token)
+        KeychainHelper.save(key: "sb_user_id", value: uid)
+        KeychainHelper.save(key: "sb_refresh_token", value: refresh)
     }
 
     func clearSession() {
         accessToken = nil
         userId      = nil
-        UserDefaults.standard.removeObject(forKey: "sb_access_token")
-        UserDefaults.standard.removeObject(forKey: "sb_user_id")
-        UserDefaults.standard.removeObject(forKey: "sb_refresh_token")
+        KeychainHelper.delete(key: "sb_access_token")
+        KeychainHelper.delete(key: "sb_user_id")
+        KeychainHelper.delete(key: "sb_refresh_token")
     }
 
     // MARK: - Auth
 
     func signUp(email: String, password: String, name: String) async throws -> SupabaseUser {
-        let body: [String: Any] = ["email": email, "password": password, "data": ["name": name]]
-        let r: SupabaseAuthResponse = try await post(path: "/auth/v1/signup", body: body, useAuth: false)
-        saveSession(r)
-        return r.user
+        let body: [String: Any] = [
+            "email": email,
+            "password": password,
+            "data": ["name": name]
+        ]
+
+        var req = makeRequest(path: "/auth/v1/signup", method: "POST")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        try checkStatus(data: data, response: resp)
+
+        // Prova prima come risposta con sessione completa
+        if let r = try? JSONDecoder().decode(SupabaseAuthResponse.self, from: data),
+           let token = r.accessToken, !token.isEmpty,
+           let refresh = r.refreshToken, !refresh.isEmpty,
+           let user = r.user {
+            saveSession(token: token, refresh: refresh, uid: user.id)
+            return user
+        }
+
+        // Altrimenti potrebbe essere una risposta senza sessione (conferma email richiesta)
+        // Prova il login immediato
+        return try await signIn(email: email, password: password)
     }
 
     func signIn(email: String, password: String) async throws -> SupabaseUser {
         let body: [String: Any] = ["email": email, "password": password]
-        let r: SupabaseAuthResponse = try await post(path: "/auth/v1/token?grant_type=password", body: body, useAuth: false)
-        saveSession(r)
-        return r.user
+
+        var req = makeRequest(path: "/auth/v1/token?grant_type=password", method: "POST")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        try checkStatus(data: data, response: resp)
+
+        let r = try JSONDecoder().decode(SupabaseAuthResponse.self, from: data)
+        guard let token = r.accessToken, !token.isEmpty,
+              let refresh = r.refreshToken, !refresh.isEmpty,
+              let user = r.user else {
+            throw SupabaseError.apiError("Risposta non valida dal server")
+        }
+        saveSession(token: token, refresh: refresh, uid: user.id)
+        return user
     }
 
     func signOut() async {
@@ -210,11 +304,10 @@ class SupabaseManager {
     func upsertEvent(_ event: BloomEvent) async throws {
         guard let uid = userId else { throw SupabaseError.notAuthenticated }
         let body = event.toSupabaseDict(userId: uid)
-        let _: [SupabaseEvent] = try await post(
+        try await postVoid(
             path: "/rest/v1/calendar_events",
             body: body,
-            useAuth: true,
-            prefer: "resolution=merge-duplicates,return=representation"
+            prefer: "resolution=merge-duplicates"
         )
     }
 
@@ -232,11 +325,10 @@ class SupabaseManager {
     func upsertShoppingItem(_ item: ShoppingItem) async throws {
         guard let uid = userId else { throw SupabaseError.notAuthenticated }
         let body = item.toSupabaseDict(userId: uid)
-        let _: [SupabaseShoppingItem] = try await post(
+        try await postVoid(
             path: "/rest/v1/shopping_items",
             body: body,
-            useAuth: true,
-            prefer: "resolution=merge-duplicates,return=representation"
+            prefer: "resolution=merge-duplicates"
         )
     }
 
@@ -265,19 +357,16 @@ class SupabaseManager {
         return try JSONDecoder().decode(T.self, from: data)
     }
 
-    private func post<T: Decodable>(path: String, body: [String: Any], useAuth: Bool, prefer: String? = nil) async throws -> T {
+    private func postVoid(path: String, body: [String: Any], prefer: String? = nil) async throws {
         var req = makeRequest(path: path, method: "POST")
-        if !useAuth { req.setValue(nil, forHTTPHeaderField: "Authorization") }
         if let p = prefer { req.setValue(p, forHTTPHeaderField: "Prefer") }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, resp) = try await URLSession.shared.data(for: req)
         try checkStatus(data: data, response: resp)
-        return try JSONDecoder().decode(T.self, from: data)
     }
 
     private func delete(path: String) async throws {
-        var req = makeRequest(path: path, method: "DELETE")
-        req.setValue("Bearer \(accessToken ?? "")", forHTTPHeaderField: "Authorization")
+        let req = makeRequest(path: path, method: "DELETE")
         let (data, resp) = try await URLSession.shared.data(for: req)
         try checkStatus(data: data, response: resp)
     }
@@ -285,9 +374,9 @@ class SupabaseManager {
     private func checkStatus(data: Data, response: URLResponse) throws {
         guard let http = response as? HTTPURLResponse else { return }
         if http.statusCode >= 400 {
-            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let msg = json["message"] as? String ?? json["msg"] as? String {
-                throw SupabaseError.apiError(msg)
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let msg = json["message"] as? String ?? json["msg"] as? String ?? json["error_description"] as? String
+                if let m = msg { throw SupabaseError.apiError(m) }
             }
             throw SupabaseError.httpError(http.statusCode)
         }
