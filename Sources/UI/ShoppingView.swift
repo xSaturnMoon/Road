@@ -478,14 +478,15 @@ struct FriendsListView: View {
 
 struct FriendDetailView: View {
     let friend: Friend
+    @ObservedObject var manager = ShoppingManager.shared
     
     var body: some View {
         List {
-            if ShoppingManager.shared.observingItems.isEmpty {
+            if manager.observingItems.isEmpty {
                 Text("In caricamento o lista vuota...")
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(ShoppingManager.shared.observingItems) { item in
+                ForEach(manager.observingItems) { item in
                     HStack {
                         Image(systemName: item.isChecked ? "checkmark.circle.fill" : "circle")
                             .foregroundColor(item.isChecked ? .green : .secondary)
@@ -500,11 +501,11 @@ struct FriendDetailView: View {
         }
         .navigationTitle(friend.name)
         .onAppear {
-            ShoppingManager.shared.fetchItemsForFriend(friend)
+            manager.fetchItemsForFriend(friend)
         }
         .onDisappear {
-            ShoppingManager.shared.observingFriend = nil
-            ShoppingManager.shared.observingItems = []
+            manager.observingFriend = nil
+            manager.observingItems = []
         }
     }
 }
