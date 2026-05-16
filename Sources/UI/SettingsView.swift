@@ -82,9 +82,6 @@ struct SettingsView: View {
                                     Text("v\(updateManager.currentVersion)")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
-                                    Text(Bundle.main.bundleIdentifier ?? "N/D")
-                                        .font(.system(size: 8, weight: .light, design: .monospaced))
-                                        .foregroundStyle(.tertiary)
                                 }
                             }
                         }
@@ -98,7 +95,7 @@ struct SettingsView: View {
                     updateManager.prepareUpdate()
                 }
             } message: {
-                Text("È disponibile la versione \(updateManager.latestVersion). Clicca per preparare l'aggiornamento: inizierà automaticamente appena chiuderai l'app.")
+                Text("È disponibile la versione \(updateManager.latestVersion). L'aggiornamento inizierà automaticamente quando chiuderai l'app.")
             }
             .alert("Tutto pronto!", isPresented: $updateManager.isUpdatePending) {
                 Button("Ho capito") { }
@@ -113,7 +110,6 @@ struct SettingsView: View {
             .sheet(isPresented: $showingAuthModal) {
                 AuthView(isPresented: $showingAuthModal)
             }
-            // Listener per il passaggio in background
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
                 updateManager.triggerPendingUpdate()
             }
@@ -128,7 +124,6 @@ struct AuthView: View {
     @State private var name = ""
     @State private var password = ""
     @StateObject var auth = AuthManager.shared
-    
     @State private var animateItems = false
     
     var body: some View {
@@ -143,44 +138,35 @@ struct AuthView: View {
                         Circle()
                             .fill(.ultraThinMaterial)
                             .frame(width: 100, height: 100)
-                            .shadow(color: .black.opacity(0.1), radius: 10)
                         
                         Image(systemName: isLogin ? "lock.shield.fill" : "person.badge.plus.fill")
                             .font(.system(size: 40))
                             .foregroundColor(.blue)
-                            .contentTransition(.symbolEffect(.replace))
                     }
                     .scaleEffect(animateItems ? 1 : 0.5)
                     .opacity(animateItems ? 1 : 0)
                     
                     Text(isLogin ? "Bentornato" : "Nuovo Account")
                         .font(.largeTitle.bold())
-                        .opacity(animateItems ? 1 : 0)
-                        .offset(y: animateItems ? 0 : 20)
                 }
                 
                 VStack(spacing: 20) {
                     if !isLogin {
                         GlassTextField(placeholder: "Nome", text: $name, icon: "person.fill")
-                            .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .opacity))
                     }
-                    
                     GlassTextField(placeholder: "Email", text: $email, icon: "envelope.fill")
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
-                    
                     GlassSecureField(placeholder: "Password", text: $password, icon: "key.fill")
                 }
                 .padding(.horizontal)
-                .offset(y: animateItems ? 0 : 40)
-                .opacity(animateItems ? 1 : 0)
                 
                 if let error = auth.authError {
                     Text(error)
                         .font(.caption)
                         .foregroundColor(.red)
                         .padding(.horizontal)
-                        .transition(.shake)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 
                 Button {
@@ -204,12 +190,9 @@ struct AuthView: View {
                     .padding()
                     .background(Color.blue)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .shadow(color: .blue.opacity(0.3), radius: 10, y: 5)
                 }
                 .padding(.horizontal)
                 .disabled(auth.isLoading || email.isEmpty || password.isEmpty)
-                .scaleEffect(animateItems ? 1 : 0.8)
-                .opacity(animateItems ? 1 : 0)
                 
                 Button {
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
@@ -219,9 +202,7 @@ struct AuthView: View {
                 } label: {
                     Text(isLogin ? "Non hai un account? Registrati ora" : "Hai già un account? Accedi")
                         .font(.subheadline)
-                        .foregroundColor(.blue.opacity(0.8))
                 }
-                .opacity(animateItems ? 1 : 0)
                 
                 Spacer()
             }
@@ -242,12 +223,9 @@ struct GlassTextField: View {
     var placeholder: String
     @Binding var text: String
     var icon: String
-    
     var body: some View {
         HStack {
-            Image(systemName: icon)
-                .foregroundColor(.blue)
-                .frame(width: 30)
+            Image(systemName: icon).foregroundColor(.blue).frame(width: 30)
             TextField(placeholder, text: $text)
         }
         .padding()
@@ -261,24 +239,14 @@ struct GlassSecureField: View {
     var placeholder: String
     @Binding var text: String
     var icon: String
-    
     var body: some View {
         HStack {
-            Image(systemName: icon)
-                .foregroundColor(.blue)
-                .frame(width: 30)
+            Image(systemName: icon).foregroundColor(.blue).frame(width: 30)
             SecureField(placeholder, text: $text)
         }
         .padding()
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.2), lineWidth: 1))
-    }
-}
-
-struct ShakeEffect: GeometryEffect {
-    var animatableData: CGFloat
-    func effectValue(size: CGSize) -> ProjectionTransform {
-        ProjectionTransform(CGAffineTransform(translationX: 10 * sin(animatableData * .pi * 4), y: 0))
     }
 }
