@@ -1,4 +1,4 @@
 {
-    "version": "1.0.1",
-    "notes": "Nuovo Calendario Mensile, sistema di aggiornamento OTA migliorato e bugfix vari."
+    "version": "1.0.2",
+    "notes": "Fix definitivi al sistema di aggiornamento OTA e all'interfaccia del calendario."
 }

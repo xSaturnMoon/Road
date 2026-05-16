@@ -134,7 +134,7 @@ struct SettingsView: View {
                             if updateManager.isChecking {
                                 ProgressView()
                             } else {
-                                Text("v1.0.0")
+                                Text("v\(updateManager.currentVersion)")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
