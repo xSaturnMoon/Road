@@ -9,7 +9,7 @@ class UpdateManager: ObservableObject {
     @Published var releaseNotes = ""
     @Published var isChecking = false
     @Published var showUpToDateAlert = false
-    @Published var downloadURL = "https://github.com/xSaturnMoon/Bloom/releases/latest"
+    @Published var downloadURL = "itms-services://?action=download-manifest&url=https://raw.githubusercontent.com/xSaturnMoon/Bloom/main/manifest.plist"
     
     @Published var currentVersion = "1.0.2"
     

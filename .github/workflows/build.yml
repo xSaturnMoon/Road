@@ -9,6 +9,9 @@ jobs:
   build:
     runs-on: macos-latest
     
+    permissions:
+      contents: write
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -39,8 +42,14 @@ jobs:
           cp -r build/Bloom.xcarchive/Products/Applications/Bloom.app Payload/
           zip -r Bloom.ipa Payload
           
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: Bloom-Unsigned-IPA
-          path: Bloom.ipa
+          tag_name: latest
+          name: Latest Build
+          files: Bloom.ipa
+          body: |
+            Aggiornamento automatico di Bloom.
+            Versione: 1.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
