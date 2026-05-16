@@ -17,7 +17,8 @@ class UpdateManager: ObservableObject {
         if isChecking { return }
         isChecking = true
         
-        guard let url = URL(string: "https://raw.githubusercontent.com/xSaturnMoon/Bloom/main/version.json") else { 
+        let cacheBuster = UUID().uuidString
+        guard let url = URL(string: "https://raw.githubusercontent.com/xSaturnMoon/Bloom/main/version.json?v=\(cacheBuster)") else { 
             isChecking = false
             return 
         }
