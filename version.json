@@ -1,4 +1,4 @@
 {
-    "version": "1.2.12",
-    "notes": "Add swipe to delete for events. Fix Today button logic. Move notification sound to Settings with audio preview. Enable multiple reminders per event."
+    "version": "1.2.13",
+    "notes": "Add 20+ more system sounds for notifications in Settings."
 }

@@ -11,10 +11,33 @@ struct SettingsView: View {
     
     let soundOptions: [(name: String, id: UInt32)] = [
         ("Predefinito", 1005),
-        ("Tri-tono", 1005),
+        ("Tri-tono (Classico)", 1005),
         ("Nota", 1012),
-        ("Aurora", 1033),
-        ("Basso", 1007)
+        ("Basso", 1007),
+        ("Nuova Mail", 1000),
+        ("Mail Inviata", 1001),
+        ("Messaggio Ricevuto", 1003),
+        ("Messaggio Inviato", 1004),
+        ("Cinguettio (Tweet)", 1016),
+        ("Attesa (Anticipate)", 1020),
+        ("Bloom", 1021),
+        ("Calypso", 1022),
+        ("Trenino (Choo Choo)", 1023),
+        ("Discesa (Descent)", 1024),
+        ("Fanfara", 1025),
+        ("Scala (Ladder)", 1026),
+        ("Minuetto", 1027),
+        ("Ultime Notizie", 1028),
+        ("Noir", 1029),
+        ("Foresta (Sherwood)", 1030),
+        ("Magia (Spell)", 1031),
+        ("Suspense", 1032),
+        ("Telegrafo", 1033),
+        ("In punta di piedi", 1034),
+        ("Macchina da scrivere", 1035),
+        ("Pop", 1054),
+        ("Campanellino (Tink)", 1104),
+        ("Successo (Apple Pay)", 1304)
     ]
 
     var body: some View {
