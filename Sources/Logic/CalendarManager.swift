@@ -137,8 +137,7 @@ class CalendarManager: ObservableObject {
         content.title = "Promemoria Bloom"
         content.body = "\(event.title) alle \(event.startTime.formatted(.dateTime.hour().minute()))"
         
-        let soundName = UserDefaults.standard.string(forKey: "bloom_notification_sound") ?? "Predefinito"
-        content.sound = .default // Fallback for unsupported custom sounds without bundle
+        content.sound = .default
 
         let cal = Calendar.current
         var targetTime = event.startTime

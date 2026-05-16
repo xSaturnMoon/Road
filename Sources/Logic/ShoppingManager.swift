@@ -120,9 +120,7 @@ class ShoppingManager: ObservableObject {
             do {
                 if let profile = try await sb.findProfileByCode(friend.code) {
                     let sbItems = try await sb.fetchShoppingItems(forUserId: profile.userId)
-                    let domainItems = sbItems.map { 
-                        ShoppingItem(id: UUID(uuidString: $0.id) ?? UUID(), name: $0.name, quantity: $0.quantity, isChecked: $0.is_checked)
-                    }
+                    let domainItems = sbItems.map { $0.toShoppingItem() }
                     await MainActor.run {
                         self.observingItems = domainItems
                     }
