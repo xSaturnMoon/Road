@@ -59,41 +59,6 @@ struct SettingsView: View {
                     }
                 }
                 
-                // Cloud Sync Section
-                if auth.currentUser != nil {
-                    Section("Sincronizzazione Cloud") {
-                        HStack {
-                            Label("Stato Sincronizzazione", systemImage: "icloud.and.arrow.up")
-                            Spacer()
-                            if auth.isSyncing {
-                                ProgressView()
-                            } else {
-                                Text("Attiva")
-                                    .font(.caption)
-                                    .padding(6)
-                                    .background(.green.opacity(0.1))
-                                    .foregroundColor(.green)
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        
-                        if let lastSync = auth.lastSyncDate {
-                            HStack {
-                                Text("Ultima Sincronizzazione")
-                                Spacer()
-                                Text(lastSync, style: .time)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        
-                        Button(role: .destructive) {
-                            auth.logout()
-                        } label: {
-                            Label("Esci dall'Account", systemImage: "rectangle.portrait.and.arrow.right")
-                        }
-                    }
-                }
-                
                 // Appearance Section
                 Section("Aspetto") {
                     Toggle(isOn: $useSystemTheme) {
@@ -110,7 +75,7 @@ struct SettingsView: View {
                 // General Section
                 Section("Generali") {
                     NavigationLink {
-                        Text("Gestione Notifiche")
+                        Text("Notifiche")
                     } label: {
                         Label("Notifiche", systemImage: "bell.badge.fill")
                     }
@@ -145,7 +110,6 @@ struct SettingsView: View {
                             }
                         }
                     }
-                    .contentShape(Rectangle()) // Better hit area for the whole row
                     
                     Link(destination: URL(string: "https://github.com/xSaturnMoon/Bloom")!) {
                         Label("Sito Web Bloom", systemImage: "safari")
@@ -153,10 +117,24 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Impostazioni")
+            .alert("Aggiornamento Disponibile", isPresented: $updateManager.isUpdateAvailable) {
+                Button("Annulla", role: .cancel) { }
+                Button("Scarica e Installa") {
+                    if let url = URL(string: updateManager.downloadURL) {
+                        UIApplication.shared.open(url)
+                        // Forza la chiusura dopo 1 secondo per permettere l'avvio del download
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            exit(0)
+                        }
+                    }
+                }
+            } message: {
+                Text("È disponibile una nuova versione di Bloom (\(updateManager.latestVersion)). L'app si chiuderà per completare l'installazione.")
+            }
             .alert("App Aggiornata", isPresented: $updateManager.showUpToDateAlert) {
                 Button("OK", role: .cancel) { }
             } message: {
-                Text("Stai già utilizzando l'ultima versione di Bloom disponibile.")
+                Text("Stai già utilizzando l'ultima versione di Bloom.")
             }
             .sheet(isPresented: $showingAuthModal) {
                 AuthView(isPresented: $showingAuthModal)

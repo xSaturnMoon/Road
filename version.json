@@ -1,4 +1,4 @@
 {
-    "version": "1.0.7",
-    "notes": "Aggiunto visualizzatore ID App nelle impostazioni per risolvere il problema dei doppioni."
+    "version": "1.0.8",
+    "notes": "Chiusura automatica dell'app all'installazione dell'aggiornamento."
 }
