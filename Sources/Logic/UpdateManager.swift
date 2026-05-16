@@ -11,7 +11,7 @@ class UpdateManager: ObservableObject {
     @Published var showUpToDateAlert = false
     @Published var downloadURL = "itms-services://?action=download-manifest&url=https://raw.githubusercontent.com/xSaturnMoon/Bloom/main/manifest.plist"
     
-    @Published var currentVersion = "1.2.1"
+    @Published var currentVersion = "1.2.2"
     
     // Stato per l'aggiornamento in attesa
     @Published var isUpdatePending = false
