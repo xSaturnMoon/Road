@@ -6,7 +6,7 @@ options:
 
 targets:
   Bloom:
-    type: bundle.application
+    type: application
     platform: iOS
     sources:
       - path: Sources
