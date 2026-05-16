@@ -1,4 +1,4 @@
 {
-    "version": "1.0.4",
-    "notes": "Fix errore di compilazione calendario e ripristino funzioni touch/swipe."
+    "version": "1.0.5",
+    "notes": "Fix definitivo Bundle ID per evitare doppioni e rispettare il limite delle 3 app di Apple."
 }
