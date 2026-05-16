@@ -3,19 +3,24 @@ import SwiftUI
 struct ContentView: View {
     var body: some View {
         TabView {
-            AppsView()
+            CalendarView()
                 .tabItem {
-                    Label("Apps", systemImage: "square.grid.2x2.fill")
+                    Label("Calendario", systemImage: "calendar")
                 }
             
-            InstallView()
+            ShoppingView()
                 .tabItem {
-                    Label("Installa", systemImage: "plus.circle.fill")
+                    Label("Spesa", systemImage: "cart")
+                }
+            
+            WeatherView()
+                .tabItem {
+                    Label("Meteo", systemImage: "cloud.sun")
                 }
             
             SettingsView()
                 .tabItem {
-                    Label("Impostazioni", systemImage: "gearshape.fill")
+                    Label("Impostazioni", systemImage: "gearshape")
                 }
         }
         .tint(.blue)

@@ -1,18 +1,18 @@
 import SwiftUI
 
-struct InstallView: View {
+struct ShoppingView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack {
-                    Text("Schermata Installazione vuota")
+                    Text("Schermata Spesa vuota")
                         .font(.title)
                         .foregroundStyle(.secondary)
                         .padding(.top, 100)
                 }
                 .frame(maxWidth: .infinity)
             }
-            .navigationTitle("Installa")
+            .navigationTitle("Spesa")
         }
     }
 }
