@@ -7,6 +7,8 @@ struct ShoppingView: View {
     @State private var showingFriendsLists = false
     @State private var newItemName = ""
     @State private var newItemQty = ""
+    @State private var showingClearAllAlert = false
+    @State private var showingClearCheckedAlert = false
     
     var body: some View {
         NavigationStack {
@@ -74,6 +76,24 @@ struct ShoppingView: View {
             }
             .navigationTitle("Spesa")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    HStack(spacing: 15) {
+                        Button(role: .destructive) {
+                            showingClearAllAlert = true
+                        } label: {
+                            Image(systemName: "trash.fill")
+                                .foregroundColor(.red)
+                        }
+                        
+                        Button {
+                            showingClearCheckedAlert = true
+                        } label: {
+                            Image(systemName: "checkmark.circle.badge.xmark.fill")
+                                .foregroundColor(.orange)
+                        }
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 15) {
                         Button {
@@ -96,6 +116,22 @@ struct ShoppingView: View {
                         }
                     }
                 }
+            }
+            .alert("Elimina tutto?", isPresented: $showingClearAllAlert) {
+                Button("Annulla", role: .cancel) {}
+                Button("Elimina Tutto", role: .destructive) {
+                    manager.clearAll()
+                }
+            } message: {
+                Text("Sei sicuro/a di voler eliminare tutti i prodotti dalla lista?")
+            }
+            .alert("Elimina completati?", isPresented: $showingClearCheckedAlert) {
+                Button("Annulla", role: .cancel) {}
+                Button("Elimina Completati", role: .destructive) {
+                    manager.clearChecked()
+                }
+            } message: {
+                Text("Sei sicuro/a di voler eliminare solo i prodotti già completati?")
             }
             .sheet(isPresented: $showingAddItem) {
                 AddItemView(isPresented: $showingAddItem)

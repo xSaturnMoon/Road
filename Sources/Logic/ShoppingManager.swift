@@ -78,6 +78,11 @@ class ShoppingManager: ObservableObject {
         saveItems()
     }
     
+    func clearAll() {
+        items.removeAll()
+        saveItems()
+    }
+    
     // MARK: - Sync Logic (ntfy.sh)
     
     func syncToNetwork() {
