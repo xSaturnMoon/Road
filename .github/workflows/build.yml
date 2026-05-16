@@ -9,9 +9,6 @@ jobs:
   build:
     runs-on: macos-latest
     
-    permissions:
-      contents: write
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -42,25 +39,13 @@ jobs:
           cp -r build/Bloom.xcarchive/Products/Applications/Bloom.app Payload/
           zip -r Bloom.ipa Payload
           
-      - name: Delete Old Release
-        run: |
-          gh release delete latest --yes || true
-          git tag -d latest || true
-          git push origin :refs/tags/latest || true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create New Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload Release
+        uses: ncipollo/release-action@v1
         with:
-          tag_name: latest
-          name: Bloom v1.0.2 (Ultima Build)
-          files: Bloom.ipa
-          make_latest: true
-          body: |
-            Aggiornamento automatico di Bloom.
-            - Sistema OTA stabilizzato.
-            - Calendario Mensile con headers.
-            - Bugfix build.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: "Bloom.ipa"
+          tag: "latest"
+          name: "Bloom Latest Build"
+          allowUpdates: true
+          replacesArtifacts: true
+          body: "Aggiornamento automatico di Bloom v1.0.2"
+          token: ${{ secrets.GITHUB_TOKEN }}
