@@ -4,54 +4,73 @@ struct CalendarView: View {
     @StateObject var manager = CalendarManager.shared
     @State private var showingAddEvent = false
     @State private var showingAllReminders = false
-    
-    // Generate dates grouped by month for the next 12 months
-    var groupedDates: [(String, [Date])] {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        var results: [(String, [Date])] = []
-        
-        // Let's show the next 6 months for a better balance
-        for monthOffset in 0..<6 {
-            guard let firstOfMonth = calendar.date(byAdding: .month, value: monthOffset, to: today),
-                  let monthRange = calendar.range(of: .day, in: .month, for: firstOfMonth) else { continue }
-            
-            let monthName = firstOfMonth.formatted(.dateTime.month(.wide).year().locale(Locale(identifier: "it_IT"))).capitalized
-            var monthDates: [Date] = []
-            
-            let startDay = (monthOffset == 0) ? calendar.component(.day, from: today) : 1
-            
-            for day in startDay...monthRange.count {
-                if let date = calendar.date(bySetting: .day, value: day, of: firstOfMonth) {
-                    monthDates.append(date)
-                }
-            }
-            
-            if !monthDates.isEmpty {
-                results.append((monthName, monthDates))
-            }
-        }
-        
-        return results
-    }
+    @State private var currentMonth = Date()
     
     var body: some View {
         NavigationStack {
             ZStack {
                 Color(uiColor: .systemBackground).ignoresSafeArea()
                 
-                ScrollView {
-                    LazyVStack(spacing: 20, pinnedViews: [.sectionHeaders]) {
-                        ForEach(groupedDates, id: \.0) { monthName, dates in
-                            Section(header: MonthHeader(title: monthName)) {
-                                ForEach(dates, id: \.self) { date in
+                VStack(spacing: 0) {
+                    // Month Selector Header
+                    HStack {
+                        Button {
+                            changeMonth(by: -1)
+                        } label: {
+                            Image(systemName: "chevron.left.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.secondary.opacity(0.5))
+                        }
+                        
+                        Spacer()
+                        
+                        Text(currentMonth.formatted(.dateTime.month(.wide).year().locale(Locale(identifier: "it_IT"))).capitalized)
+                            .font(.title2.bold())
+                        
+                        Spacer()
+                        
+                        Button {
+                            changeMonth(by: 1)
+                        } label: {
+                            Image(systemName: "chevron.right.circle.fill")
+                                .font(.title2)
+                                .foregroundColor(.secondary.opacity(0.5))
+                        }
+                    }
+                    .padding()
+                    .background(.ultraThinMaterial)
+                    
+                    // Agenda for the selected month
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(spacing: 15) {
+                                let days = daysInMonth(for: currentMonth)
+                                
+                                ForEach(days, id: \.self) { date in
                                     DayCardView(date: date)
-                                        .padding(.horizontal)
+                                        .id(date)
+                                }
+                            }
+                            .padding()
+                        }
+                        .onAppear {
+                            // Scroll to today if it's the current month
+                            if isCurrentMonth(currentMonth) {
+                                proxy.scrollTo(Calendar.current.startOfDay(for: Date()), anchor: .top)
+                            }
+                        }
+                        .onChange(of: currentMonth) { _ in
+                            if isCurrentMonth(currentMonth) {
+                                withAnimation {
+                                    proxy.scrollTo(Calendar.current.startOfDay(for: Date()), anchor: .top)
+                                }
+                            } else {
+                                // Scroll to first day of the month
+                                if let firstDay = daysInMonth(for: currentMonth).first {
+                                    proxy.scrollTo(firstDay, anchor: .top)
                                 }
                             }
                         }
-                        
-                        Spacer(minLength: 100)
                     }
                 }
             }
@@ -77,27 +96,34 @@ struct CalendarView: View {
                 }
             }
             .sheet(isPresented: $showingAddEvent) {
-                AddEventView(isPresented: $showingAddEvent)
+                AddEventView(isPresented: $showingAddEvent, initialDate: currentMonth)
             }
             .sheet(isPresented: $showingAllReminders) {
                 AllRemindersView(isPresented: $showingAllReminders)
             }
         }
     }
-}
-
-struct MonthHeader: View {
-    let title: String
     
-    var body: some View {
-        HStack {
-            Text(title)
-                .font(.title2.bold())
-                .padding(.vertical, 10)
-                .padding(.horizontal, 20)
-            Spacer()
+    func changeMonth(by value: Int) {
+        if let newMonth = Calendar.current.date(byAdding: .month, value: value, to: currentMonth) {
+            withAnimation {
+                currentMonth = newMonth
+            }
         }
-        .background(.ultraThinMaterial)
+    }
+    
+    func daysInMonth(for date: Date) -> [Date] {
+        let calendar = Calendar.current
+        guard let range = calendar.range(of: .day, in: .month, for: date),
+              let firstOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: date)) else { return [] }
+        
+        return range.compactMap { day -> Date? in
+            calendar.date(byAdding: .day, value: day - 1, to: firstOfMonth)
+        }
+    }
+    
+    func isCurrentMonth(_ date: Date) -> Bool {
+        Calendar.current.isDate(date, equalTo: Date(), toGranularity: .month)
     }
 }
 
@@ -110,7 +136,6 @@ struct DayCardView: View {
         let isToday = Calendar.current.isDateInToday(date)
         
         VStack(alignment: .leading, spacing: 12) {
-            // Day Header
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(date.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "it_IT"))).capitalized)
@@ -132,7 +157,6 @@ struct DayCardView: View {
                 }
             }
             
-            // Events List
             if events.isEmpty {
                 Text("Nessun impegno")
                     .font(.subheadline)
@@ -171,6 +195,11 @@ struct DayCardView: View {
                         .padding(12)
                         .background(Color.primary.opacity(0.05))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                withAnimation { manager.deleteEvent(event) }
+                            } label: { Label("Elimina", systemImage: "trash") }
+                        }
                     }
                 }
             }
@@ -224,10 +253,24 @@ struct AllRemindersView: View {
 
 struct AddEventView: View {
     @Binding var isPresented: Bool
+    let initialDate: Date
     @State private var title = ""
-    @State private var date = Date()
+    @State private var date: Date
     @State private var startTime = Date()
     @State private var reminderEnabled = true
+    
+    init(isPresented: Bool, initialDate: Date) {
+        self._isPresented = State(initialValue: isPresented) // Fix state
+        self.initialDate = initialDate
+        self._date = State(initialValue: initialDate)
+    }
+    
+    // Using a simpler init for the sheet
+    init(isPresented: Binding<Bool>, initialDate: Date) {
+        self._isPresented = isPresented
+        self.initialDate = initialDate
+        self._date = State(initialValue: initialDate)
+    }
     
     var body: some View {
         NavigationStack {
