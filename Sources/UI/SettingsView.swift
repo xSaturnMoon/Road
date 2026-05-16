@@ -33,9 +33,12 @@ struct SettingsView: View {
                             
                             Spacer()
                             
-                            Image(systemName: "chevron.right")
-                                .font(.caption.bold())
-                                .foregroundStyle(.secondary)
+                            Button {
+                                auth.logout()
+                            } label: {
+                                Image(systemName: "rectangle.portrait.and.arrow.right")
+                                    .foregroundColor(.red)
+                            }
                         }
                         .padding(.vertical, 8)
                     } else {
@@ -47,43 +50,15 @@ struct SettingsView: View {
                                     .font(.title2)
                                     .foregroundColor(.blue)
                                 VStack(alignment: .leading) {
-                                    Text("Crea un Account")
+                                    Text("Accedi o Registrati")
                                         .font(.headline)
-                                    Text("Sincronizza i tuoi dati nel cloud")
+                                    Text("Per non perdere mai i tuoi dati")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
                             }
                         }
                         .padding(.vertical, 4)
-                    }
-                }
-                
-                // Appearance Section
-                Section("Aspetto") {
-                    Toggle(isOn: $useSystemTheme) {
-                        Label("Usa Tema di Sistema", systemImage: "iphone")
-                    }
-                    
-                    if !useSystemTheme {
-                        Toggle(isOn: $isDarkMode) {
-                            Label("Modalità Scura", systemImage: isDarkMode ? "moon.fill" : "sun.max.fill")
-                        }
-                    }
-                }
-                
-                // General Section
-                Section("Generali") {
-                    NavigationLink {
-                        Text("Notifiche")
-                    } label: {
-                        Label("Notifiche", systemImage: "bell.badge.fill")
-                    }
-                    
-                    NavigationLink {
-                        Text("Privacy e Sicurezza")
-                    } label: {
-                        Label("Privacy", systemImage: "hand.raised.fill")
                     }
                 }
                 
@@ -110,10 +85,6 @@ struct SettingsView: View {
                             }
                         }
                     }
-                    
-                    Link(destination: URL(string: "https://github.com/xSaturnMoon/Bloom")!) {
-                        Label("Sito Web Bloom", systemImage: "safari")
-                    }
                 }
             }
             .navigationTitle("Impostazioni")
@@ -122,19 +93,13 @@ struct SettingsView: View {
                 Button("Scarica e Installa") {
                     if let url = URL(string: updateManager.downloadURL) {
                         UIApplication.shared.open(url)
-                        // Forza la chiusura dopo 1 secondo per permettere l'avvio del download
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                             exit(0)
                         }
                     }
                 }
             } message: {
-                Text("È disponibile una nuova versione di Bloom (\(updateManager.latestVersion)). L'app si chiuderà per completare l'installazione.")
-            }
-            .alert("App Aggiornata", isPresented: $updateManager.showUpToDateAlert) {
-                Button("OK", role: .cancel) { }
-            } message: {
-                Text("Stai già utilizzando l'ultima versione di Bloom.")
+                Text("È disponibile una nuova versione (\(updateManager.latestVersion)). L'app si chiuderà per aggiornarsi.")
             }
             .sheet(isPresented: $showingAuthModal) {
                 AuthView(isPresented: $showingAuthModal)
@@ -145,92 +110,176 @@ struct SettingsView: View {
 
 struct AuthView: View {
     @Binding var isPresented: Bool
-    @State private var isLogin = false
+    @State private var isLogin = true
     @State private var email = ""
     @State private var name = ""
     @State private var password = ""
-    @ObservedObject var auth = AuthManager.shared
+    @StateObject var auth = AuthManager.shared
+    
+    @State private var animateItems = false
     
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 25) {
-                VStack(spacing: 12) {
-                    Image(systemName: "aqi.medium")
-                        .font(.system(size: 60))
-                        .foregroundColor(.blue)
-                        .padding()
-                        .background(.blue.opacity(0.1))
-                        .clipShape(Circle())
-                    
-                    Text(isLogin ? "Bentornato su Bloom" : "Crea Account Bloom")
-                        .font(.title.bold())
-                    
-                    Text("I tuoi dati saranno al sicuro e sincronizzati in tempo reale su ogni dispositivo.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
-                }
-                .padding(.top, 30)
-                
+        ZStack {
+            // Background dynamic gradient
+            LinearGradient(colors: [.blue.opacity(0.3), .purple.opacity(0.3), .cyan.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                .ignoresSafeArea()
+                .blur(radius: 50)
+            
+            VStack(spacing: 30) {
+                // Logo & Header
                 VStack(spacing: 15) {
+                    ZStack {
+                        Circle()
+                            .fill(.ultraThinMaterial)
+                            .frame(width: 100, height: 100)
+                            .shadow(color: .black.opacity(0.1), radius: 10)
+                        
+                        Image(systemName: isLogin ? "lock.shield.fill" : "person.badge.plus.fill")
+                            .font(.system(size: 40))
+                            .foregroundColor(.blue)
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .scaleEffect(animateItems ? 1 : 0.5)
+                    .opacity(animateItems ? 1 : 0)
+                    
+                    Text(isLogin ? "Bentornato" : "Nuovo Account")
+                        .font(.largeTitle.bold())
+                        .opacity(animateItems ? 1 : 0)
+                        .offset(y: animateItems ? 0 : 20)
+                }
+                
+                // Form
+                VStack(spacing: 20) {
                     if !isLogin {
-                        TextField("Nome", text: $name)
-                            .padding()
-                            .background(Color(uiColor: .secondarySystemBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        GlassTextField(placeholder: "Nome", text: $name, icon: "person.fill")
+                            .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .opacity))
                     }
                     
-                    TextField("Email", text: $email)
-                        .padding()
-                        .background(Color(uiColor: .secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    GlassTextField(placeholder: "Email", text: $email, icon: "envelope.fill")
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
                     
-                    SecureField("Password", text: $password)
-                        .padding()
-                        .background(Color(uiColor: .secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    GlassSecureField(placeholder: "Password", text: $password, icon: "key.fill")
                 }
                 .padding(.horizontal)
+                .offset(y: animateItems ? 0 : 40)
+                .opacity(animateItems ? 1 : 0)
                 
+                if let error = auth.authError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.horizontal)
+                        .transition(.shake)
+                }
+                
+                // Action Button
                 Button {
                     if isLogin {
-                        auth.login(email: email)
+                        auth.login(email: email, password: password)
                     } else {
-                        auth.signUp(email: email, name: name)
+                        auth.signUp(email: email, name: name, password: password)
                     }
-                    isPresented = false
                 } label: {
-                    Text(isLogin ? "Accedi" : "Registrati")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    HStack {
+                        if auth.isLoading {
+                            ProgressView().tint(.white)
+                        } else {
+                            Text(isLogin ? "Accedi" : "Crea Account")
+                                .fontWeight(.bold)
+                            Image(systemName: "arrow.right.circle.fill")
+                        }
+                    }
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .shadow(color: .blue.opacity(0.3), radius: 10, y: 5)
                 }
                 .padding(.horizontal)
-                .disabled(email.isEmpty || password.isEmpty || (!isLogin && name.isEmpty))
+                .disabled(auth.isLoading || email.isEmpty || password.isEmpty)
+                .scaleEffect(animateItems ? 1 : 0.8)
+                .opacity(animateItems ? 1 : 0)
                 
+                // Switch Mode
                 Button {
-                    withAnimation {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                         isLogin.toggle()
+                        auth.authError = nil
                     }
                 } label: {
-                    Text(isLogin ? "Non hai un account? Registrati" : "Hai già un account? Accedi")
+                    Text(isLogin ? "Non hai un account? Registrati ora" : "Hai già un account? Accedi")
                         .font(.subheadline)
+                        .foregroundColor(.blue.opacity(0.8))
                 }
+                .opacity(animateItems ? 1 : 0)
                 
                 Spacer()
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Chiudi") { isPresented = false }
-                }
+            .padding(.top, 40)
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                animateItems = true
             }
         }
+        .onChange(of: auth.currentUser?.id) { _ in
+            if auth.currentUser != nil { isPresented = false }
+        }
+    }
+}
+
+struct GlassTextField: View {
+    var placeholder: String
+    @Binding var text: String
+    var icon: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundColor(.blue)
+                .frame(width: 30)
+            TextField(placeholder, text: $text)
+        }
+        .padding()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.2), lineWidth: 1))
+    }
+}
+
+struct GlassSecureField: View {
+    var placeholder: String
+    @Binding var text: String
+    var icon: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .foregroundColor(.blue)
+                .frame(width: 30)
+            SecureField(placeholder, text: $text)
+        }
+        .padding()
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.2), lineWidth: 1))
+    }
+}
+
+extension AnyTransition {
+    static var shake: AnyTransition {
+        .modifier(
+            active: ShakeEffect(animatableData: 1),
+            identity: ShakeEffect(animatableData: 0)
+        )
+    }
+}
+
+struct ShakeEffect: GeometryEffect {
+    var animatableData: CGFloat
+    func effectValue(size: CGSize) -> ProjectionTransform {
+        ProjectionTransform(CGAffineTransform(translationX: 10 * sin(animatableData * .pi * 4), y: 0))
     }
 }

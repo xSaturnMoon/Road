@@ -1,4 +1,4 @@
 {
-    "version": "1.0.8",
-    "notes": "Chiusura automatica dell'app all'installazione dell'aggiornamento."
+    "version": "1.0.9",
+    "notes": "Sistema Account REALE, Database utenti locale, Grafica Glassmorphism e animazioni fluide."
 }
