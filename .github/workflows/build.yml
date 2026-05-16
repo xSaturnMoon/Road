@@ -44,15 +44,22 @@ jobs:
             PRODUCT_BUNDLE_IDENTIFIER=com.bloom.app \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            ENTITLEMENTS_REQUIRED=NO \
-            | xcpretty || true
+            ENTITLEMENTS_REQUIRED=NO
 
       - name: Package IPA
         run: |
+          # Trova l'app indipendentemente dal percorso esatto dei Products
+          APP_PATH=$(find build/Bloom.xcarchive -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERRORE: App non trovata nell'archivio!"
+            exit 1
+          fi
+          echo "App trovata in: $APP_PATH"
+          
           mkdir -p Payload
-          cp -r build/Bloom.xcarchive/Products/Applications/Bloom.app Payload/
+          cp -r "$APP_PATH" Payload/
           zip -r Bloom.ipa Payload/
-          echo "IPA size: $(du -sh Bloom.ipa)"
+          echo "IPA creato con successo."
 
       - name: Delete old 'latest' release if exists
         env:
@@ -73,10 +80,10 @@ jobs:
             Bundle ID: `com.bloom.app`
             
             ### Installazione
-            Apri l'app Bloom → Impostazioni → Verifica Aggiornamenti → Installa al termine
+            Apri l'app Bloom → Impostazioni → Verifica Aggiornamenti
             
             ### Prima installazione
-            Installa `Bloom.ipa` tramite Sideloadly o AltStore.
+            Installa `Bloom.ipa` tramite Sideloadly.
           allowUpdates: true
           replacesArtifacts: true
           makeLatest: true
