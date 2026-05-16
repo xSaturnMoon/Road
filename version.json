@@ -1,4 +1,4 @@
 {
-    "version": "1.2.4",
-    "notes": "Fix account persistente tra reinstallazioni (Keychain), fix errore registrazione, redesign UI login senza colori rosa."
+    "version": "1.2.5",
+    "notes": "Codice amico permanente su Supabase + QR Code per aggiungere amici."
 }

@@ -241,39 +241,75 @@ struct AddItemView: View {
 struct ShareView: View {
     @Binding var isPresented: Bool
     @ObservedObject var manager = ShoppingManager.shared
+    @StateObject var auth = AuthManager.shared
     @State private var friendCode = ""
     @State private var friendName = ""
-    
+    @State private var showCopied = false
+
+    var displayCode: String {
+        auth.currentUser?.friendCode ?? manager.myCode
+    }
+
     var body: some View {
         NavigationStack {
             List {
-                Section("Il tuo codice") {
-                    HStack {
-                        Text(manager.myCode)
-                            .font(.title2.monospaced().bold())
-                            .foregroundColor(.blue)
-                        Spacer()
-                        Button {
-                            UIPasteboard.general.string = manager.myCode
-                        } label: {
-                            Image(systemName: "doc.on.doc")
+                Section {
+                    VStack(spacing: 20) {
+                        if !displayCode.isEmpty {
+                            QRCodeView(content: "bloom://friend/\(displayCode)")
+                                .frame(width: 200, height: 200)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .shadow(color: .black.opacity(0.1), radius: 8, y: 4)
+                                .padding(.top, 8)
                         }
+                        VStack(spacing: 8) {
+                            Text(displayCode)
+                                .font(.system(size: 22, weight: .bold, design: .monospaced))
+                                .tracking(4)
+                                .foregroundColor(.primary)
+                            Button {
+                                UIPasteboard.general.string = displayCode
+                                withAnimation { showCopied = true }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    withAnimation { showCopied = false }
+                                }
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            } label: {
+                                Label(
+                                    showCopied ? "Copiato!" : "Copia Codice",
+                                    systemImage: showCopied ? "checkmark.circle.fill" : "doc.on.doc"
+                                )
+                                .font(.subheadline.bold())
+                                .foregroundColor(showCopied ? .green : .blue)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(Capsule().fill(showCopied ? Color.green.opacity(0.12) : Color.blue.opacity(0.12)))
+                            }
+                            .animation(.spring(response: 0.3), value: showCopied)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.bottom, 8)
+                        Text("Fai scansionare questo QR all'amico, oppure condividigli il codice.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
                     }
-                    Text("Condividi questo codice con un amico per permettergli di vedere la tua spesa.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
-                
+
                 Section("Aggiungi Amico") {
-                    TextField("Codice Amico", text: $friendCode)
+                    TextField("Codice Amico (8 caratteri)", text: $friendCode)
                         .autocapitalization(.allCharacters)
+                        .onChange(of: friendCode) { val in friendCode = String(val.prefix(8)) }
                     TextField("Nome Amico", text: $friendName)
                     Button("Aggiungi") {
-                        manager.addFriend(code: friendCode, name: friendName)
+                        manager.addFriend(code: friendCode.uppercased(), name: friendName)
                         friendCode = ""
                         friendName = ""
+                        UINotificationFeedbackGenerator().notificationOccurred(.success)
                     }
-                    .disabled(friendCode.isEmpty || friendName.isEmpty)
+                    .disabled(friendCode.count < 4 || friendName.isEmpty)
                 }
             }
             .navigationTitle("Condivisione")
@@ -284,6 +320,36 @@ struct ShareView: View {
                 }
             }
         }
+    }
+}
+
+// MARK: - QR Code Generator (CoreImage nativo, zero dipendenze)
+
+struct QRCodeView: View {
+    let content: String
+
+    var body: some View {
+        if let img = generateQR(from: content) {
+            Image(uiImage: img)
+                .interpolation(.none)
+                .resizable()
+                .scaledToFit()
+        } else {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.secondary.opacity(0.2))
+        }
+    }
+
+    private func generateQR(from string: String) -> UIImage? {
+        guard let data = string.data(using: .utf8) else { return nil }
+        let filter = CIFilter(name: "CIQRCodeGenerator")
+        filter?.setValue(data, forKey: "inputMessage")
+        filter?.setValue("H", forKey: "inputCorrectionLevel")
+        guard let ciImage = filter?.outputImage else { return nil }
+        let scaled = ciImage.transformed(by: CGAffineTransform(scaleX: 10, y: 10))
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(scaled, from: scaled.extent) else { return nil }
+        return UIImage(cgImage: cgImage)
     }
 }
 

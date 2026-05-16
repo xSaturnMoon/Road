@@ -381,4 +381,46 @@ class SupabaseManager {
             throw SupabaseError.httpError(http.statusCode)
         }
     }
+
+    // MARK: - Profile / Friend Code
+
+    /// Genera un codice amico permanente e lo salva su Supabase.
+    /// Se esiste già lo restituisce, altrimenti lo crea.
+    func fetchOrCreateProfile() async throws -> String {
+        guard let uid = userId else { throw SupabaseError.notAuthenticated }
+
+        // Prova a leggere il profilo esistente
+        let existing: [[String: Any]] = try await getRaw(
+            path: "/rest/v1/profiles?user_id=eq.\(uid)&select=friend_code"
+        )
+        if let first = existing.first, let code = first["friend_code"] as? String {
+            return code
+        }
+
+        // Nessun profilo trovato → creane uno nuovo
+        let newCode = String((0..<8).map { _ in
+            "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".randomElement()!
+        })
+        let body: [String: Any] = ["user_id": uid, "friend_code": newCode]
+        try await postVoid(path: "/rest/v1/profiles", body: body, prefer: "resolution=ignore-duplicates")
+        return newCode
+    }
+
+    /// Cerca un utente per codice amico e restituisce user_id e display name.
+    func findProfileByCode(_ code: String) async throws -> (userId: String, name: String)? {
+        let results: [[String: Any]] = try await getRaw(
+            path: "/rest/v1/profiles?friend_code=eq.\(code.uppercased())&select=user_id"
+        )
+        guard let first = results.first, let uid = first["user_id"] as? String else {
+            return nil
+        }
+        return (userId: uid, name: code)
+    }
+
+    private func getRaw(path: String) async throws -> [[String: Any]] {
+        let req = makeRequest(path: path)
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        try checkStatus(data: data, response: resp)
+        return (try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]) ?? []
+    }
 }

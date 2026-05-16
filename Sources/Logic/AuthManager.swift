@@ -6,6 +6,7 @@ struct BloomUser: Codable, Identifiable {
     var name: String
     var email: String
     var supabaseId: String?
+    var friendCode: String?
 }
 
 class AuthManager: ObservableObject {
@@ -52,19 +53,26 @@ class AuthManager: ObservableObject {
         Task {
             do {
                 let sbUser = try await sb.signIn(email: email, password: password)
-                let user = BloomUser(
+                var user = BloomUser(
                     name: sbUser.userMetadata?.name ?? email.components(separatedBy: "@").first ?? "Utente",
                     email: email,
                     supabaseId: sbUser.id
                 )
+                // Carica il codice amico permanente da Supabase
+                let friendCode = try? await sb.fetchOrCreateProfile()
+                user.friendCode = friendCode
+
                 await MainActor.run {
                     self.currentUser = user
                     self.saveLocalSession(user)
                     self.isLoading = false
                     self.lastSyncDate = Date()
+                    // Aggiorna anche ShoppingManager con il codice definitivo
+                    if let code = friendCode {
+                        ShoppingManager.shared.myCode = code
+                    }
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 }
-                // Sync cloud data after login
                 await syncAfterLogin()
             } catch {
                 await MainActor.run {
@@ -83,12 +91,19 @@ class AuthManager: ObservableObject {
         Task {
             do {
                 let sbUser = try await sb.signUp(email: email, password: password, name: name)
-                let user = BloomUser(name: name, email: email, supabaseId: sbUser.id)
+                var user = BloomUser(name: name, email: email, supabaseId: sbUser.id)
+                // Crea il codice amico permanente su Supabase
+                let friendCode = try? await sb.fetchOrCreateProfile()
+                user.friendCode = friendCode
+
                 await MainActor.run {
                     self.currentUser = user
                     self.saveLocalSession(user)
                     self.isLoading = false
                     self.lastSyncDate = Date()
+                    if let code = friendCode {
+                        ShoppingManager.shared.myCode = code
+                    }
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                 }
             } catch {
@@ -107,6 +122,7 @@ class AuthManager: ObservableObject {
             await MainActor.run {
                 self.currentUser = nil
                 self.saveLocalSession(nil)
+                ShoppingManager.shared.myCode = ""
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
         }
@@ -118,14 +134,12 @@ class AuthManager: ObservableObject {
         await MainActor.run { isSyncing = true }
 
         do {
-            // Sync calendar events
             let cloudEvents = try await sb.fetchEvents()
             let bloomEvents = cloudEvents.map { $0.toBloomEvent() }
             await MainActor.run {
                 CalendarManager.shared.replaceWithCloudData(bloomEvents)
             }
 
-            // Sync shopping items
             let cloudItems = try await sb.fetchShoppingItems()
             let shopItems = cloudItems.map { $0.toShoppingItem() }
             await MainActor.run {
