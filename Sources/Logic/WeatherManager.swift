@@ -156,10 +156,14 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     }
     
     private func parseResponse(_ res: OpenMeteoResponse, location: WeatherLocation) -> WeatherData {
+        let currentHour = Calendar.current.component(.hour, from: Date())
+        let currentIsDay = currentHour >= 6 && currentHour < 20
+        let currentCondition = weatherCodeToCondition(res.current.weather_code, isDay: currentIsDay)
+
         let current = CurrentWeather(
             temp: res.current.temperature_2m,
             description: weatherCodeToText(res.current.weather_code),
-            condition: weatherCodeToCondition(res.current.weather_code),
+            condition: currentCondition,
             humidity: res.current.relative_humidity_2m,
             windSpeed: res.current.wind_speed_10m,
             uvIndex: res.current.uv_index,
@@ -172,10 +176,13 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         let startOfDay = Calendar.current.startOfDay(for: Date())
         for i in 0..<res.hourly.temperature_2m.count {
             let time = Calendar.current.date(byAdding: .hour, value: i, to: startOfDay)!
+            let hourComponent = Calendar.current.component(.hour, from: time)
+            let isDay = hourComponent >= 6 && hourComponent < 20
+            
             hourly.append(HourlyWeather(
                 time: time,
                 temp: res.hourly.temperature_2m[i],
-                condition: weatherCodeToCondition(res.hourly.weather_code[i]),
+                condition: weatherCodeToCondition(res.hourly.weather_code[i], isDay: isDay),
                 description: weatherCodeToText(res.hourly.weather_code[i]),
                 rainProbability: res.hourly.precipitation_probability[i]
             ))
@@ -188,7 +195,7 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 date: date,
                 tempMin: res.daily.temperature_2m_min[i],
                 tempMax: res.daily.temperature_2m_max[i],
-                condition: weatherCodeToCondition(res.daily.weather_code[i]),
+                condition: weatherCodeToCondition(res.daily.weather_code[i], isDay: true),
                 description: weatherCodeToText(res.daily.weather_code[i]),
                 rainProbability: res.daily.precipitation_probability_max[i]
             ))
@@ -210,15 +217,15 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
     }
     
-    private func weatherCodeToCondition(_ code: Int) -> String {
+    private func weatherCodeToCondition(_ code: Int, isDay: Bool) -> String {
         switch code {
-        case 0: return "sunny"
+        case 0: return isDay ? "sunny" : "clear_night"
         case 1, 2, 3: return "cloudy"
         case 45, 48: return "fog"
         case 51, 53, 55, 61, 63, 65: return "rainy"
         case 71, 73, 75: return "snowy"
         case 95: return "thunder"
-        default: return "sunny"
+        default: return isDay ? "sunny" : "clear_night"
         }
     }
 }

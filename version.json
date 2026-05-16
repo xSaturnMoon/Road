@@ -1,4 +1,4 @@
 {
-    "version": "1.2.9",
-    "notes": "Fix build errors related to Swift 6 (mutable captures, duplicate extensions, onChange deprecations)."
+    "version": "1.2.10",
+    "notes": "Revert dynamic backgrounds to system dark/light theme. Fix jumping UI on day tap. Fix close button in weather details. Show moon icon at night instead of sun."
 }
