@@ -1,4 +1,4 @@
 {
-    "version": "1.2.7",
-    "notes": "Force login on app start, fix weather percentages and localization, update weather daily detail view."
+    "version": "1.2.8",
+    "notes": "Redesign UI meteo: sfondi dinamici, animazioni e tema glassmorphic scuro per una leggibilità e un'estetica premium."
 }
