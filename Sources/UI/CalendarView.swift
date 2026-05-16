@@ -59,14 +59,14 @@ struct CalendarView: View {
                                 proxy.scrollTo(Calendar.current.startOfDay(for: Date()), anchor: .top)
                             }
                         }
-                        .onChange(of: currentMonth) { _ in
-                            if isCurrentMonth(currentMonth) {
+                        .onChange(of: currentMonth) { oldDate, newDate in
+                            if isCurrentMonth(newDate) {
                                 withAnimation {
                                     proxy.scrollTo(Calendar.current.startOfDay(for: Date()), anchor: .top)
                                 }
                             } else {
                                 // Scroll to first day of the month
-                                if let firstDay = daysInMonth(for: currentMonth).first {
+                                if let firstDay = daysInMonth(for: newDate).first {
                                     proxy.scrollTo(firstDay, anchor: .top)
                                 }
                             }
@@ -259,13 +259,6 @@ struct AddEventView: View {
     @State private var startTime = Date()
     @State private var reminderEnabled = true
     
-    init(isPresented: Bool, initialDate: Date) {
-        self._isPresented = State(initialValue: isPresented) // Fix state
-        self.initialDate = initialDate
-        self._date = State(initialValue: initialDate)
-    }
-    
-    // Using a simpler init for the sheet
     init(isPresented: Binding<Bool>, initialDate: Date) {
         self._isPresented = isPresented
         self.initialDate = initialDate
