@@ -23,6 +23,11 @@ class AuthManager: ObservableObject {
 
     init() {
         loadLocalSession()
+        if isLoggedIn {
+            Task {
+                await syncAfterLogin()
+            }
+        }
     }
 
     var isLoggedIn: Bool { currentUser != nil && sb.isAuthenticated }
@@ -33,6 +38,9 @@ class AuthManager: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: sessionKey),
            let user = try? JSONDecoder().decode(BloomUser.self, from: data) {
             currentUser = user
+            if let code = user.friendCode {
+                ShoppingManager.shared.myCode = code
+            }
         }
     }
 

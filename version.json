@@ -1,4 +1,4 @@
 {
-    "version": "1.2.19",
-    "notes": "Ensure friendCode is correctly fetched for existing sessions. Add more descriptive error statuses to help debug Supabase RLS."
+    "version": "1.2.20",
+    "notes": "Ensure local session correctly sets friendCode and triggers sync on app startup."
 }
