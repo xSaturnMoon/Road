@@ -316,6 +316,32 @@ struct ShareView: View {
                                 .font(.system(size: 22, weight: .bold, design: .monospaced))
                                 .tracking(4)
                                 .foregroundColor(.primary)
+                            
+                            if displayCode.count == 6 {
+                                Text("Attenzione: questo è un codice locale offline. Se non diventa di 8 caratteri, clicca 'Forza Ricarica'. Errore: \(auth.authError ?? "")")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal)
+                                
+                                Button("Forza Ricarica Codice") {
+                                    Task {
+                                        if let code = try? await SupabaseManager.shared.fetchOrCreateProfile() {
+                                            await MainActor.run {
+                                                auth.currentUser?.friendCode = code
+                                                manager.myCode = code
+                                            }
+                                        } else {
+                                            await MainActor.run {
+                                                auth.authError = "Impossibile scaricare/creare il profilo su Supabase (RLS o API disabilitata)."
+                                            }
+                                        }
+                                    }
+                                }
+                                .font(.caption.bold())
+                                .buttonStyle(.borderedProminent)
+                            }
+                            
                             Button {
                                 UIPasteboard.general.string = displayCode
                                 withAnimation { showCopied = true }
