@@ -11,7 +11,10 @@ class UpdateManager: ObservableObject {
     @Published var showUpToDateAlert = false
     @Published var downloadURL = "itms-services://?action=download-manifest&url=https://raw.githubusercontent.com/xSaturnMoon/Bloom/main/manifest.plist"
     
-    @Published var currentVersion = "1.0.9"
+    @Published var currentVersion = "1.1.0"
+    
+    // Stato per l'aggiornamento in attesa
+    @Published var isUpdatePending = false
     
     func checkForUpdates(manual: Bool = false) {
         if isChecking { return }
@@ -41,5 +44,24 @@ class UpdateManager: ObservableObject {
                 }
             }
         }.resume()
+    }
+    
+    func prepareUpdate() {
+        isUpdatePending = true
+        isUpdateAvailable = false
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+    }
+    
+    func triggerPendingUpdate() {
+        guard isUpdatePending else { return }
+        if let url = URL(string: downloadURL) {
+            UIApplication.shared.open(url)
+            isUpdatePending = false
+            
+            // Piccola attesa e poi chiusura definitiva
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                exit(0)
+            }
+        }
     }
 }

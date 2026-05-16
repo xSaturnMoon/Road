@@ -73,6 +73,10 @@ struct SettingsView: View {
                             Spacer()
                             if updateManager.isChecking {
                                 ProgressView()
+                            } else if updateManager.isUpdatePending {
+                                Text("In attesa di chiusura...")
+                                    .font(.caption)
+                                    .foregroundColor(.orange)
                             } else {
                                 VStack(alignment: .trailing, spacing: 2) {
                                     Text("v\(updateManager.currentVersion)")
@@ -90,19 +94,28 @@ struct SettingsView: View {
             .navigationTitle("Impostazioni")
             .alert("Aggiornamento Disponibile", isPresented: $updateManager.isUpdateAvailable) {
                 Button("Annulla", role: .cancel) { }
-                Button("Scarica e Installa") {
-                    if let url = URL(string: updateManager.downloadURL) {
-                        UIApplication.shared.open(url)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                            exit(0)
-                        }
-                    }
+                Button("Installa al termine") {
+                    updateManager.prepareUpdate()
                 }
             } message: {
-                Text("È disponibile una nuova versione (\(updateManager.latestVersion)). L'app si chiuderà per aggiornarsi.")
+                Text("È disponibile la versione \(updateManager.latestVersion). Clicca per preparare l'aggiornamento: inizierà automaticamente appena chiuderai l'app.")
+            }
+            .alert("Tutto pronto!", isPresented: $updateManager.isUpdatePending) {
+                Button("Ho capito") { }
+            } message: {
+                Text("L'aggiornamento inizierà quando tornerai alla Home screen. A presto!")
+            }
+            .alert("App Aggiornata", isPresented: $updateManager.showUpToDateAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Stai già utilizzando l'ultima versione di Bloom.")
             }
             .sheet(isPresented: $showingAuthModal) {
                 AuthView(isPresented: $showingAuthModal)
+            }
+            // Listener per il passaggio in background
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
+                updateManager.triggerPendingUpdate()
             }
         }
     }
@@ -120,13 +133,11 @@ struct AuthView: View {
     
     var body: some View {
         ZStack {
-            // Background dynamic gradient
             LinearGradient(colors: [.blue.opacity(0.3), .purple.opacity(0.3), .cyan.opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing)
                 .ignoresSafeArea()
                 .blur(radius: 50)
             
             VStack(spacing: 30) {
-                // Logo & Header
                 VStack(spacing: 15) {
                     ZStack {
                         Circle()
@@ -148,7 +159,6 @@ struct AuthView: View {
                         .offset(y: animateItems ? 0 : 20)
                 }
                 
-                // Form
                 VStack(spacing: 20) {
                     if !isLogin {
                         GlassTextField(placeholder: "Nome", text: $name, icon: "person.fill")
@@ -173,7 +183,6 @@ struct AuthView: View {
                         .transition(.shake)
                 }
                 
-                // Action Button
                 Button {
                     if isLogin {
                         auth.login(email: email, password: password)
@@ -202,7 +211,6 @@ struct AuthView: View {
                 .scaleEffect(animateItems ? 1 : 0.8)
                 .opacity(animateItems ? 1 : 0)
                 
-                // Switch Mode
                 Button {
                     withAnimation(.spring(response: 0.5, dampingFraction: 0.7)) {
                         isLogin.toggle()
@@ -265,15 +273,6 @@ struct GlassSecureField: View {
         .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.2), lineWidth: 1))
-    }
-}
-
-extension AnyTransition {
-    static var shake: AnyTransition {
-        .modifier(
-            active: ShakeEffect(animatableData: 1),
-            identity: ShakeEffect(animatableData: 0)
-        )
     }
 }
 
