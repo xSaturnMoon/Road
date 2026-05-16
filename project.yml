@@ -1,14 +1,23 @@
 name: Bloom
 options:
-  bundleIdPrefix: com.xsaturnmoon.bloom
+  bundleIdPrefix: com.xsaturnmoon.Bloom
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation
+    from: 0.9.0
+  Swifter:
+    url: https://github.com/httpswift/swifter.git
+    from: 1.5.0
 targets:
   Bloom:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
     sources: [Sources]
+    dependencies:
+      - package: ZIPFoundation
+      - package: Swifter
     settings:
       INFOPLIST_FILE: Sources/Info.plist
-      PRODUCT_BUNDLE_IDENTIFIER: com.xsaturnmoon.bloom
+      PRODUCT_BUNDLE_IDENTIFIER: com.xsaturnmoon.Bloom
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-      TARGETED_DEVICE_FAMILY: 1,2

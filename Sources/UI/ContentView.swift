@@ -1,42 +1,37 @@
 import SwiftUI
 
-enum Tab {
-    case calendar
-    case shopping
-    case weather
-    case settings
-}
-
 struct ContentView: View {
-    @State private var selectedTab: Tab = .calendar
+    @ObservedObject var manager = AppManager.shared
     
     var body: some View {
-        TabView(selection: $selectedTab) {
-            CalendarView()
+        TabView {
+            // SEZIONE APPS
+            AppsView()
                 .tabItem {
-                    Label("Calendario", systemImage: "calendar")
+                    Label("Apps", systemImage: "square.grid.2x2.fill")
                 }
-                .tag(Tab.calendar)
             
-            ShoppingView()
+            // SEZIONE INSTALL
+            InstallView()
                 .tabItem {
-                    Label("Spesa", systemImage: "cart")
+                    Label("Installa", systemImage: "plus.circle.fill")
                 }
-                .tag(Tab.shopping)
             
-            WeatherView()
-                .tabItem {
-                    Label("Meteo", systemImage: "cloud.sun")
-                }
-                .tag(Tab.weather)
-            
+            // SEZIONE SETTINGS
             SettingsView()
                 .tabItem {
-                    Label("Impostazioni", systemImage: "gearshape")
+                    Label("Impostazioni", systemImage: "gearshape.fill")
                 }
-                .tag(Tab.settings)
         }
-        .tint(.primary)
+        .tint(.blue)
+        .toolbar {
+            if !manager.isInstalling {
+                Button {
+                    manager.refreshAll()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+            }
+        }
     }
 }
-

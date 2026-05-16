@@ -1,18 +1,22 @@
-name: Build iOS App
+name: Build Bloom IPA
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
-    name: Build and export IPA
     runs-on: macos-latest
-
+    
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.3.0'
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -20,28 +24,23 @@ jobs:
       - name: Generate Xcode Project
         run: xcodegen generate
 
-      - name: Build unsigned IPA
+      - name: Build IPA (Unsigned)
         run: |
-          # Costruiamo un archivio non firmato (perfetto per essere installato tramite iStore)
-          xcodebuild clean archive \
+          xcodebuild archive \
             -project Bloom.xcodeproj \
             -scheme Bloom \
             -configuration Release \
-            -archivePath $PWD/build/Bloom.xcarchive \
-            CODE_SIGN_IDENTITY="" \
+            -archivePath build/Bloom.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_ENTITLEMENTS="" \
-            CODE_SIGNING_ALLOWED=NO
+            ENTITLEMENTS_REQUIRED=NO
 
-      - name: Export IPA from Archive
-        run: |
-          # Creiamo manualmente l'IPA inserendo l'app in una cartella Payload
           mkdir -p Payload
-          mv build/Bloom.xcarchive/Products/Applications/Bloom.app Payload/
+          cp -r build/Bloom.xcarchive/Products/Applications/Bloom.app Payload/
           zip -r Bloom.ipa Payload
-
-      - name: Upload IPA Artifact
+          
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: Bloom-IPA
+          name: Bloom-Unsigned-IPA
           path: Bloom.ipa
