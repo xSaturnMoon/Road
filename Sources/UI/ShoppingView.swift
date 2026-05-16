@@ -11,8 +11,8 @@ struct ShoppingView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background Gradients
-                LinearGradient(colors: [.blue.opacity(0.15), .purple.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                // Background (Automatic solid color based on theme)
+                Color(uiColor: .systemBackground)
                     .ignoresSafeArea()
                 
                 ScrollView {
@@ -188,17 +188,6 @@ struct AddItemView: View {
                     TextField("Nome prodotto", text: $name)
                     TextField("Quantità (es. 2kg, 1 pacco)", text: $qty)
                 }
-                
-                Section("Immagine (Opzionale)") {
-                    TextField("URL Immagine", text: $imageURL)
-                        .keyboardType(.URL)
-                        .autocapitalization(.none)
-                    
-                    Button("Genera placeholder") {
-                        imageURL = ShoppingItem.randomPlaceholderImage(for: name)
-                    }
-                    .disabled(name.isEmpty)
-                }
             }
             .navigationTitle("Aggiungi Prodotto")
             .navigationBarTitleDisplayMode(.inline)
@@ -208,7 +197,8 @@ struct AddItemView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Salva") {
-                        manager.addItem(name: name, quantity: qty, imageURL: imageURL.isEmpty ? nil : imageURL)
+                        let autoImage = ShoppingItem.randomPlaceholderImage(for: name)
+                        manager.addItem(name: name, quantity: qty, imageURL: autoImage)
                         isPresented = false
                     }
                     .disabled(name.isEmpty)
