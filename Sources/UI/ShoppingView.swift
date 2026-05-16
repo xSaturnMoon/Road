@@ -500,7 +500,7 @@ struct FriendDetailView: View {
         }
         .navigationTitle(friend.name)
         .onAppear {
-            ShoppingManager.shared.observingFriend = friend
+            ShoppingManager.shared.fetchItemsForFriend(friend)
         }
         .onDisappear {
             ShoppingManager.shared.observingFriend = nil

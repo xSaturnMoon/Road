@@ -319,7 +319,11 @@ class SupabaseManager {
 
     func fetchShoppingItems() async throws -> [SupabaseShoppingItem] {
         guard let uid = userId else { throw SupabaseError.notAuthenticated }
-        return try await get(path: "/rest/v1/shopping_items?user_id=eq.\(uid)&select=*&order=created_at.asc")
+        return try await fetchShoppingItems(forUserId: uid)
+    }
+
+    func fetchShoppingItems(forUserId targetUserId: String) async throws -> [SupabaseShoppingItem] {
+        return try await get(path: "/rest/v1/shopping_items?user_id=eq.\(targetUserId)&select=*&order=created_at.asc")
     }
 
     func upsertShoppingItem(_ item: ShoppingItem) async throws {
