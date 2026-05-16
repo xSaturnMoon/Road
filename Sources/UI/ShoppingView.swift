@@ -326,14 +326,15 @@ struct ShareView: View {
                                 
                                 Button("Forza Ricarica Codice") {
                                     Task {
-                                        if let code = try? await SupabaseManager.shared.fetchOrCreateProfile() {
+                                        do {
+                                            let code = try await SupabaseManager.shared.fetchOrCreateProfile()
                                             await MainActor.run {
                                                 auth.currentUser?.friendCode = code
                                                 manager.myCode = code
                                             }
-                                        } else {
+                                        } catch {
                                             await MainActor.run {
-                                                auth.authError = "Impossibile scaricare/creare il profilo su Supabase (RLS o API disabilitata)."
+                                                auth.authError = "Errore Supabase: \(error.localizedDescription)"
                                             }
                                         }
                                     }
