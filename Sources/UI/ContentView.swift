@@ -65,8 +65,10 @@ struct ContentView: View {
             }
             .padding(.vertical, 16)
             .padding(.horizontal, 30)
-            .background(.ultraThinMaterial)
-            .clipShape(Capsule())
+            .background(
+                VisualEffectView(effect: UIBlurEffect(style: .systemChromeMaterial))
+                    .clipShape(Capsule())
+            )
             .overlay(
                 Capsule()
                     .stroke(
@@ -78,6 +80,18 @@ struct ContentView: View {
             .padding(.bottom, 40)
         }
         .ignoresSafeArea(.keyboard, edges: .bottom)
+    }
+}
+
+// Wrapping UIVisualEffectView for the official Apple Glass effect
+struct VisualEffectView: UIViewRepresentable {
+    var effect: UIVisualEffect?
+    func makeUIView(context: UIViewRepresentableContext<Self>) -> UIVisualEffectView {
+        let view = UIVisualEffectView()
+        return view
+    }
+    func updateUIView(_ uiView: UIVisualEffectView, context: UIViewRepresentableContext<Self>) {
+        uiView.effect = effect
     }
 }
 
