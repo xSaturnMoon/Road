@@ -9,61 +9,36 @@ struct CalendarView: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Month Selector Header
-                HStack {
-                    Button { changeMonth(by: -1) } label: {
-                        Image(systemName: "chevron.left.circle.fill").font(.title2).foregroundColor(.secondary.opacity(0.5))
-                    }
-                    Spacer()
-                    Text(currentMonth.formatted(.dateTime.month(.wide).year().locale(Locale(identifier: "it_IT"))).capitalized)
-                        .font(.title2.bold())
-                    Spacer()
-                    Button { changeMonth(by: 1) } label: {
-                        Image(systemName: "chevron.right.circle.fill").font(.title2).foregroundColor(.secondary.opacity(0.5))
-                    }
-                }
-                .padding()
-                .background(.ultraThinMaterial)
+            ZStack {
+                Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
                 
-                // Agenda List
-                List {
-                    let days = daysInMonth(for: currentMonth)
-                    ForEach(days, id: \.self) { date in
-                        Section {
-                            let events = manager.events(for: date)
-                            if events.isEmpty {
-                                Text("Nessun impegno")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .italic()
-                                    .listRowBackground(Color.clear)
-                            } else {
-                                ForEach(events) { event in
-                                    EventRowView(event: event) {
-                                        selectedEvent = event
-                                    }
-                                    .swipeActions(edge: .trailing) {
-                                        Button(role: .destructive) {
-                                            withAnimation { manager.deleteEvent(event) }
-                                        } label: { Label("Elimina", systemImage: "trash") }
-                                    }
-                                }
-                            }
-                        } header: {
-                            HStack {
-                                Text(date.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "it_IT"))).capitalized)
-                                Text(date.formatted(.dateTime.day().locale(Locale(identifier: "it_IT"))))
-                                if Calendar.current.isDateInToday(date) {
-                                    Text("OGGI").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2).background(.blue).foregroundColor(.white).clipShape(Capsule())
-                                }
-                            }
-                            .font(.subheadline.bold())
-                            .foregroundColor(.primary)
+                VStack(spacing: 0) {
+                    // Month Selector Header
+                    HStack {
+                        Button { changeMonth(by: -1) } label: {
+                            Image(systemName: "chevron.left.circle.fill").font(.title2).foregroundColor(.secondary.opacity(0.5))
+                        }
+                        Spacer()
+                        Text(currentMonth.formatted(.dateTime.month(.wide).year().locale(Locale(identifier: "it_IT"))).capitalized)
+                            .font(.title2.bold())
+                        Spacer()
+                        Button { changeMonth(by: 1) } label: {
+                            Image(systemName: "chevron.right.circle.fill").font(.title2).foregroundColor(.secondary.opacity(0.5))
                         }
                     }
+                    .padding()
+                    .background(.ultraThinMaterial)
+                    
+                    // Agenda List with Card Aesthetic
+                    List {
+                        let days = daysInMonth(for: currentMonth)
+                        ForEach(days, id: \.self) { date in
+                            DayCardRow(date: date, selectedEvent: $selectedEvent)
+                        }
+                    }
+                    .listStyle(.plain)
+                    .background(Color.clear)
                 }
-                .listStyle(.insetGrouped)
             }
             .navigationTitle("Calendario")
             .navigationBarTitleDisplayMode(.inline)
@@ -107,6 +82,64 @@ struct CalendarView: View {
     }
 }
 
+struct DayCardRow: View {
+    let date: Date
+    @Binding var selectedEvent: BloomEvent?
+    @StateObject var manager = CalendarManager.shared
+    
+    var body: some View {
+        let events = manager.events(for: date)
+        let isToday = Calendar.current.isDateInToday(date)
+        
+        VStack(alignment: .leading, spacing: 0) {
+            // Day Header inside the card
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(date.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "it_IT"))).capitalized)
+                        .font(.caption.bold())
+                        .foregroundColor(isToday ? .blue : .secondary)
+                    
+                    Text(date.formatted(.dateTime.day().locale(Locale(identifier: "it_IT"))))
+                        .font(.title3.bold())
+                }
+                Spacer()
+                if isToday {
+                    Text("OGGI").font(.caption2.bold()).padding(.horizontal, 8).padding(.vertical, 4).background(.blue).foregroundColor(.white).clipShape(Capsule())
+                }
+            }
+            .padding(.bottom, 12)
+            
+            if events.isEmpty {
+                Text("Nessun impegno")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .italic()
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(events) { event in
+                        EventRowView(event: event) {
+                            selectedEvent = event
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                withAnimation { manager.deleteEvent(event) }
+                            } label: { Label("Elimina", systemImage: "trash") }
+                        }
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .listRowInsets(EdgeInsets())
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+    }
+}
+
 struct EventRowView: View {
     let event: BloomEvent
     let onTap: () -> Void
@@ -141,6 +174,9 @@ struct EventRowView: View {
                 }
                 .buttonStyle(.plain)
             }
+            .padding(12)
+            .background(Color.primary.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .buttonStyle(.plain)
     }
@@ -180,8 +216,7 @@ struct EditEventView: View {
                         CalendarManager.shared.deleteEvent(event)
                         dismiss()
                     } label: {
-                        Text("Elimina Impegno")
-                            .frame(maxWidth: .infinity)
+                        Text("Elimina Impegno").frame(maxWidth: .infinity)
                     }
                 }
             }

@@ -1,4 +1,4 @@
 {
-    "version": "1.0.5",
-    "notes": "Fix definitivo Bundle ID per evitare doppioni e rispettare il limite delle 3 app di Apple."
+    "version": "1.0.6",
+    "notes": "Ripristino grafica a schede (rettangoli) per il calendario."
 }
