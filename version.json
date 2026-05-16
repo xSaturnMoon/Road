@@ -1,4 +1,4 @@
 {
-    "version": "1.0.6",
-    "notes": "Ripristino grafica a schede (rettangoli) per il calendario."
+    "version": "1.0.7",
+    "notes": "Aggiunto visualizzatore ID App nelle impostazioni per risolvere il problema dei doppioni."
 }

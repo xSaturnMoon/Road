@@ -134,9 +134,14 @@ struct SettingsView: View {
                             if updateManager.isChecking {
                                 ProgressView()
                             } else {
-                                Text("v\(updateManager.currentVersion)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text("v\(updateManager.currentVersion)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    Text(Bundle.main.bundleIdentifier ?? "N/D")
+                                        .font(.system(size: 8, weight: .light, design: .monospaced))
+                                        .foregroundStyle(.tertiary)
+                                }
                             }
                         }
                     }
