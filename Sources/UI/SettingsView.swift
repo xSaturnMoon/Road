@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @StateObject var auth = AuthManager.shared
+    @StateObject var updateManager = UpdateManager.shared
     @AppStorage("isDarkMode") private var isDarkMode = false
     @AppStorage("useSystemTheme") private var useSystemTheme = true
     @State private var showingAuthModal = false
@@ -124,16 +125,22 @@ struct SettingsView: View {
                 // Info Section
                 Section {
                     Button {
-                        UpdateManager.shared.checkForUpdates()
+                        updateManager.checkForUpdates(manual: true)
                     } label: {
                         HStack {
                             Label("Verifica Aggiornamenti", systemImage: "arrow.clockwise.circle")
+                                .foregroundColor(.primary)
                             Spacer()
-                            Text("v1.0.0")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            if updateManager.isChecking {
+                                ProgressView()
+                            } else {
+                                Text("v1.0.0")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
+                    .contentShape(Rectangle()) // Better hit area for the whole row
                     
                     Link(destination: URL(string: "https://github.com/xSaturnMoon/Bloom")!) {
                         Label("Sito Web Bloom", systemImage: "safari")
@@ -141,6 +148,11 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Impostazioni")
+            .alert("App Aggiornata", isPresented: $updateManager.showUpToDateAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Stai già utilizzando l'ultima versione di Bloom disponibile.")
+            }
             .sheet(isPresented: $showingAuthModal) {
                 AuthView(isPresented: $showingAuthModal)
             }
@@ -159,7 +171,6 @@ struct AuthView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 25) {
-                // Header
                 VStack(spacing: 12) {
                     Image(systemName: "aqi.medium")
                         .font(.system(size: 60))
@@ -179,7 +190,6 @@ struct AuthView: View {
                 }
                 .padding(.top, 30)
                 
-                // Form
                 VStack(spacing: 15) {
                     if !isLogin {
                         TextField("Nome", text: $name)
