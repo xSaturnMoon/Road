@@ -9,6 +9,9 @@ jobs:
   build:
     runs-on: macos-latest
     
+    permissions:
+      contents: write
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -47,5 +50,5 @@ jobs:
           name: "Bloom Latest Build"
           allowUpdates: true
           replacesArtifacts: true
-          body: "Aggiornamento automatico di Bloom v1.0.2"
+          body: "Aggiornamento automatico di Bloom v1.0.4"
           token: ${{ secrets.GITHUB_TOKEN }}
