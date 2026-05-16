@@ -1,4 +1,4 @@
 {
-    "version": "1.2.8",
-    "notes": "Redesign UI meteo: sfondi dinamici, animazioni e tema glassmorphic scuro per una leggibilità e un'estetica premium."
+    "version": "1.2.9",
+    "notes": "Fix build errors related to Swift 6 (mutable captures, duplicate extensions, onChange deprecations)."
 }

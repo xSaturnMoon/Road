@@ -321,10 +321,10 @@ struct AuthView: View {
                 cardOpacity = 1.0
             }
         }
-        .onChange(of: auth.authError) { error in
+        .onChange(of: auth.authError) { _, error in
             if error != nil { performShake() }
         }
-        .onChange(of: auth.currentUser?.id) { _ in
+        .onChange(of: auth.currentUser?.id) { _, _ in
             if auth.currentUser != nil {
                 withAnimation { isPresented = false }
             }

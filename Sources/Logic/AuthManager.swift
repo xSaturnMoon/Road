@@ -61,10 +61,10 @@ class AuthManager: ObservableObject {
                 // Carica il codice amico permanente da Supabase
                 let friendCode = try? await sb.fetchOrCreateProfile()
                 user.friendCode = friendCode
-
+                let finalUser = user
                 await MainActor.run {
-                    self.currentUser = user
-                    self.saveLocalSession(user)
+                    self.currentUser = finalUser
+                    self.saveLocalSession(finalUser)
                     self.isLoading = false
                     self.lastSyncDate = Date()
                     // Aggiorna anche ShoppingManager con il codice definitivo
@@ -95,10 +95,10 @@ class AuthManager: ObservableObject {
                 // Crea il codice amico permanente su Supabase
                 let friendCode = try? await sb.fetchOrCreateProfile()
                 user.friendCode = friendCode
-
+                let finalUser = user
                 await MainActor.run {
-                    self.currentUser = user
-                    self.saveLocalSession(user)
+                    self.currentUser = finalUser
+                    self.saveLocalSession(finalUser)
                     self.isLoading = false
                     self.lastSyncDate = Date()
                     if let code = friendCode {

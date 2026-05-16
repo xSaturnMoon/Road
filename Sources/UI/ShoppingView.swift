@@ -350,7 +350,7 @@ struct ShareView: View {
                 Section("Aggiungi Amico") {
                     TextField("Codice Amico (8 caratteri)", text: $friendCode)
                         .autocapitalization(.allCharacters)
-                        .onChange(of: friendCode) { val in friendCode = String(val.prefix(8)) }
+                        .onChange(of: friendCode) { _, val in friendCode = String(val.prefix(8)) }
                     TextField("Nome Amico", text: $friendName)
                     Button("Aggiungi") {
                         manager.addFriend(code: friendCode.uppercased(), name: friendName)

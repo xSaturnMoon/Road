@@ -47,7 +47,7 @@ struct ContentView: View {
                 showingAuth = true
             }
         }
-        .onChange(of: AuthManager.shared.isLoggedIn) { loggedIn in
+        .onChange(of: AuthManager.shared.isLoggedIn) { _, loggedIn in
             if !loggedIn {
                 showingAuth = true
             } else {
