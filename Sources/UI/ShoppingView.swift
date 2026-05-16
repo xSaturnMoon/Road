@@ -15,16 +15,22 @@ struct ShoppingView: View {
                 Color(uiColor: .systemBackground)
                     .ignoresSafeArea()
                 
-                ScrollView {
-                    VStack(spacing: 20) {
+                List {
+                    Section {
                         // Quick Stats Header
                         HStack(spacing: 15) {
                             statCard(title: "Prodotti", value: "\(manager.items.count)", icon: "bag.fill", color: .blue)
                             statCard(title: "Completati", value: "\(manager.items.filter({$0.isChecked}).count)", icon: "checkmark.circle.fill", color: .green)
                         }
-                        .padding(.horizontal)
-                        
-                        if manager.items.isEmpty {
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .padding(.vertical, 10)
+                    }
+                    .padding(.horizontal)
+
+                    if manager.items.isEmpty {
+                        Section {
                             VStack(spacing: 20) {
                                 Image(systemName: "cart.badge.plus")
                                     .font(.system(size: 60))
@@ -34,20 +40,37 @@ struct ShoppingView: View {
                                     .font(.headline)
                                     .foregroundStyle(.secondary)
                             }
-                        } else {
-                            LazyVStack(spacing: 12) {
-                                ForEach(manager.items) { item in
-                                    ShoppingItemCard(item: item)
-                                        .transition(.scale.combined(with: .opacity))
-                                }
-                            }
-                            .padding(.horizontal)
+                            .frame(maxWidth: .infinity)
                         }
-                        
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    } else {
+                        ForEach(manager.items) { item in
+                            ShoppingItemCard(item: item)
+                                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .swipeActions(edge: .trailing) {
+                                    Button(role: .destructive) {
+                                        withAnimation {
+                                            manager.deleteItem(item)
+                                        }
+                                    } label: {
+                                        Label("Elimina", systemImage: "trash")
+                                    }
+                                }
+                        }
+                    }
+                    
+                    // Spacer at the bottom
+                    Section {
                         Spacer(minLength: 120)
                     }
-                    .padding(.top)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
             }
             .navigationTitle("Spesa")
             .toolbar {
@@ -143,15 +166,6 @@ struct ShoppingItemCard: View {
             RoundedRectangle(cornerRadius: 18)
                 .stroke(.white.opacity(0.1), lineWidth: 1)
         )
-        .contextMenu {
-            Button(role: .destructive) {
-                withAnimation {
-                    manager.deleteItem(item)
-                }
-            } label: {
-                Label("Elimina", systemImage: "trash")
-            }
-        }
     }
 }
 
