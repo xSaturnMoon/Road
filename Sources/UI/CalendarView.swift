@@ -4,7 +4,6 @@ struct CalendarView: View {
     @StateObject var manager = CalendarManager.shared
     @State private var selectedDate = Date()
     @State private var showingAddEvent = false
-    @State private var weekOffset = 0
     
     var body: some View {
         NavigationStack {
@@ -12,67 +11,61 @@ struct CalendarView: View {
                 Color(uiColor: .systemBackground).ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Modern Week Picker
-                    VStack(spacing: 15) {
-                        HStack {
-                            Text(selectedDate.formatted(.dateTime.month(.wide).year()))
-                                .font(.title2.bold())
-                            Spacer()
-                            Button {
-                                selectedDate = Date()
-                            } label: {
-                                Text("Oggi")
-                                    .font(.subheadline.bold())
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(.blue.opacity(0.1))
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        .padding(.horizontal)
-                        
-                        WeekScrollView(selectedDate: $selectedDate)
-                    }
-                    .padding(.vertical)
-                    .background(.ultraThinMaterial)
-                    
-                    // Agenda List
-                    ScrollView {
-                        VStack(spacing: 15) {
-                            let dayEvents = manager.events(for: selectedDate)
-                            
-                            if dayEvents.isEmpty {
-                                VStack(spacing: 20) {
-                                    Image(systemName: "calendar.badge.plus")
-                                        .font(.system(size: 60))
-                                        .foregroundStyle(.secondary)
-                                        .padding(.top, 60)
-                                    Text("Nessun evento per oggi")
-                                        .font(.headline)
-                                        .foregroundStyle(.secondary)
-                                }
-                            } else {
-                                ForEach(dayEvents) { event in
-                                    EventCard(event: event)
-                                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                                }
-                            }
-                            
-                            Spacer(minLength: 100)
-                        }
+                    // Standard Month Calendar
+                    DatePicker("Data", selection: $selectedDate, displayedComponents: .date)
+                        .datePickerStyle(.graphical)
                         .padding()
+                        .background(.ultraThinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                        .padding()
+                    
+                    // Events List
+                    List {
+                        let dayEvents = manager.events(for: selectedDate)
+                        
+                        if dayEvents.isEmpty {
+                            Section {
+                                ContentUnavailableView {
+                                    Label("Nessun Evento", systemImage: "calendar.badge.plus")
+                                } description: {
+                                    Text("Non ci sono eventi programmati per questa giornata.")
+                                } actions: {
+                                    Button("Aggiungi Evento") {
+                                        showingAddEvent = true
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                            }
+                            .listRowBackground(Color.clear)
+                        } else {
+                            Section("Eventi di oggi") {
+                                ForEach(dayEvents) { event in
+                                    EventRow(event: event)
+                                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                                        .swipeActions(edge: .trailing) {
+                                            Button(role: .destructive) {
+                                                withAnimation {
+                                                    manager.deleteEvent(event)
+                                                }
+                                            } label: {
+                                                Label("Elimina", systemImage: "trash")
+                                            }
+                                        }
+                                }
+                            }
+                        }
                     }
+                    .listStyle(.plain)
                 }
             }
             .navigationTitle("Calendario")
-            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         showingAddEvent.toggle()
                     } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title3)
+                        Image(systemName: "plus")
+                            .font(.headline)
                     }
                 }
             }
@@ -83,66 +76,23 @@ struct CalendarView: View {
     }
 }
 
-struct WeekScrollView: View {
-    @Binding var selectedDate: Date
-    let calendar = Calendar.current
-    
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 12) {
-                ForEach(-15..<15) { day in
-                    let date = calendar.date(byAdding: .day, value: day, to: Date())!
-                    let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
-                    
-                    VStack(spacing: 8) {
-                        Text(date.formatted(.dateTime.weekday(.abbreviated)))
-                            .font(.caption2.bold())
-                            .foregroundStyle(isSelected ? .white : .secondary)
-                        
-                        Text(date.formatted(.dateTime.day()))
-                            .font(.headline)
-                            .foregroundStyle(isSelected ? .white : .primary)
-                    }
-                    .frame(width: 45, height: 70)
-                    .background(isSelected ? Color.blue : Color.blue.opacity(0.05))
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .onTapGesture {
-                        withAnimation(.spring()) {
-                            selectedDate = date
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal)
-        }
-    }
-}
-
-struct EventCard: View {
+struct EventRow: View {
     let event: BloomEvent
     @ObservedObject var manager = CalendarManager.shared
     
     var body: some View {
-        HStack(spacing: 15) {
-            // Time Column
-            VStack(alignment: .trailing) {
+        HStack(spacing: 12) {
+            VStack {
                 Text(event.startTime, format: .dateTime.hour().minute())
-                    .font(.subheadline.bold())
-                if let endTime = event.endTime {
-                    Text(endTime, format: .dateTime.hour().minute())
+                    .font(.headline)
+                if let end = event.endTime {
+                    Text(end, format: .dateTime.hour().minute())
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(width: 55)
+            .frame(width: 50)
             
-            // Category Bar
-            Rectangle()
-                .fill(categoryColor)
-                .frame(width: 4)
-                .clipShape(Capsule())
-            
-            // Info
             VStack(alignment: .leading, spacing: 4) {
                 Text(event.title)
                     .font(.headline)
@@ -155,13 +105,14 @@ struct EventCard: View {
                         .lineLimit(1)
                 }
                 
-                Text(event.category)
-                    .font(.system(size: 8, weight: .bold))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(categoryColor.opacity(0.1))
-                    .foregroundColor(categoryColor)
-                    .clipShape(Capsule())
+                HStack {
+                    Circle()
+                        .fill(categoryColor)
+                        .frame(width: 8, height: 8)
+                    Text(event.category)
+                        .font(.caption2.bold())
+                        .foregroundStyle(.secondary)
+                }
             }
             
             Spacer()
@@ -178,20 +129,7 @@ struct EventCard: View {
         }
         .padding()
         .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 18))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(.white.opacity(0.1), lineWidth: 1)
-        )
-        .swipeActions(edge: .trailing) {
-            Button(role: .destructive) {
-                withAnimation {
-                    manager.deleteEvent(event)
-                }
-            } label: {
-                Label("Elimina", systemImage: "trash")
-            }
-        }
+        .clipShape(RoundedRectangle(cornerRadius: 15))
     }
     
     var categoryColor: Color {
@@ -210,8 +148,8 @@ struct AddEventView: View {
     
     @State private var title = ""
     @State private var date: Date
-    @State private var startTime = Date()
-    @State private var endTime = Date().addingTimeInterval(3600)
+    @State private var startTime: Date
+    @State private var endTime: Date
     @State private var category = "Generale"
     @State private var notes = ""
     
@@ -219,19 +157,24 @@ struct AddEventView: View {
         self._isPresented = isPresented
         self.initialDate = initialDate
         self._date = State(initialValue: initialDate)
+        self._startTime = State(initialValue: initialDate)
+        self._endTime = State(initialValue: initialDate.addingTimeInterval(3600))
     }
     
     var body: some View {
         NavigationStack {
             Form {
-                Section("Dettagli") {
+                Section("Informazioni Principali") {
                     TextField("Titolo evento", text: $title)
                     DatePicker("Data", selection: $date, displayedComponents: .date)
-                    DatePicker("Inizio", selection: $startTime, displayedComponents: .hourAndMinute)
-                    DatePicker("Fine", selection: $endTime, displayedComponents: .hourAndMinute)
                 }
                 
-                Section("Altro") {
+                Section("Orario") {
+                    DatePicker("Dalle", selection: $startTime, displayedComponents: .hourAndMinute)
+                    DatePicker("Alle", selection: $endTime, displayedComponents: .hourAndMinute)
+                }
+                
+                Section("Dettagli") {
                     Picker("Categoria", selection: $category) {
                         Text("Generale").tag("Generale")
                         Text("Lavoro").tag("Lavoro")

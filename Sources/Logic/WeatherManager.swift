@@ -38,20 +38,46 @@ struct DailyWeather: Identifiable, Codable {
     var rainProbability: Int
 }
 
+struct WeatherLocation: Identifiable, Codable {
+    var id = UUID()
+    var name: String
+    let lat: Double
+    let lon: Double
+}
+
 class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     static let shared = WeatherManager()
     
-    @Published var weather: WeatherData?
+    @Published var locations: [WeatherLocation] = []
+    @Published var weatherData: [UUID: WeatherData] = [:]
     @Published var isLoading = false
     @Published var error: String?
     
     private let locationManager = CLLocationManager()
     private var cancellables = Set<AnyCancellable>()
+    private let locationsKey = "bloom_weather_locations"
     
     override init() {
         super.init()
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyThreeKilometers
+        loadLocations()
+    }
+    
+    func loadLocations() {
+        if let data = UserDefaults.standard.data(forKey: locationsKey),
+           let decoded = try? JSONDecoder().decode([WeatherLocation].self, from: data) {
+            self.locations = decoded
+            refreshAll()
+        } else {
+            requestLocation()
+        }
+    }
+    
+    func saveLocations() {
+        if let encoded = try? JSONEncoder().encode(locations) {
+            UserDefaults.standard.set(encoded, forKey: locationsKey)
+        }
     }
     
     func requestLocation() {
@@ -62,7 +88,19 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
     
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.first else { return }
-        fetchWeather(for: location)
+        
+        CLGeocoder().reverseGeocodeLocation(location) { placemarks, _ in
+            let cityName = placemarks?.first?.locality ?? "Mia Posizione"
+            let newLoc = WeatherLocation(name: cityName, lat: location.coordinate.latitude, lon: location.coordinate.longitude)
+            
+            DispatchQueue.main.async {
+                if !self.locations.contains(where: { $0.name == cityName }) {
+                    self.locations.insert(newLoc, at: 0)
+                    self.saveLocations()
+                }
+                self.fetchWeather(for: newLoc)
+            }
+        }
     }
     
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
@@ -70,12 +108,33 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         self.isLoading = false
     }
     
-    func fetchWeather(for location: CLLocation) {
-        let lat = location.coordinate.latitude
-        let lon = location.coordinate.longitude
-        
-        // Open-Meteo API (No key required, highly accurate)
-        let urlString = "https://api.open-meteo.com/v1/forecast?latitude=\(lat)&longitude=\(lon)&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,pressure_msl,surface_pressure,wind_speed_10m,uv_index,visibility&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto"
+    func addCity(name: String) {
+        CLGeocoder().geocodeAddressString(name) { placemarks, _ in
+            guard let loc = placemarks?.first?.location else { return }
+            let cityName = placemarks?.first?.locality ?? name
+            let newLoc = WeatherLocation(name: cityName, lat: loc.coordinate.latitude, lon: loc.coordinate.longitude)
+            
+            DispatchQueue.main.async {
+                self.locations.append(newLoc)
+                self.saveLocations()
+                self.fetchWeather(for: newLoc)
+            }
+        }
+    }
+    
+    func removeCity(at indexSet: IndexSet) {
+        locations.remove(atOffsets: indexSet)
+        saveLocations()
+    }
+    
+    func refreshAll() {
+        for loc in locations {
+            fetchWeather(for: loc)
+        }
+    }
+    
+    func fetchWeather(for location: WeatherLocation) {
+        let urlString = "https://api.open-meteo.com/v1/forecast?latitude=\(location.lat)&longitude=\(location.lon)&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,pressure_msl,surface_pressure,wind_speed_10m,uv_index,visibility&hourly=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto"
         
         guard let url = URL(string: urlString) else { return }
         
@@ -84,20 +143,16 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             .decode(type: OpenMeteoResponse.self, decoder: JSONDecoder())
             .receive(on: DispatchQueue.main)
             .sink { completion in
-                self.isLoading = false
                 if case .failure(let err) = completion {
-                    self.error = "Errore dati meteo: \(err.localizedDescription)"
+                    print("Weather error: \(err)")
                 }
             } receiveValue: { response in
-                self.weather = self.parseResponse(response, location: location)
+                self.weatherData[location.id] = self.parseResponse(response, location: location)
             }
             .store(in: &cancellables)
     }
     
-    private func parseResponse(_ res: OpenMeteoResponse, location: CLLocation) -> WeatherData {
-        // Reverse geocoding to get city name
-        let city = "Posizione Attuale" // Default
-        
+    private func parseResponse(_ res: OpenMeteoResponse, location: WeatherLocation) -> WeatherData {
         let current = CurrentWeather(
             temp: res.current.temperature_2m,
             description: weatherCodeToText(res.current.weather_code),
@@ -105,7 +160,7 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             humidity: res.current.relative_humidity_2m,
             windSpeed: res.current.wind_speed_10m,
             uvIndex: res.current.uv_index,
-            visibility: res.current.visibility / 1000.0, // Convert to km
+            visibility: res.current.visibility / 1000.0,
             pressure: res.current.pressure_msl,
             feelsLike: res.current.apparent_temperature
         )
@@ -118,17 +173,17 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         
         var daily: [DailyWeather] = []
         for i in 0..<7 {
-            let date = Date().addingTimeInterval(TimeInterval(i * 86400))
+            let date = Calendar.current.date(byAdding: .day, value: i, to: Date())!
             daily.append(DailyWeather(date: date, tempMin: res.daily.temperature_2m_min[i], tempMax: res.daily.temperature_2m_max[i], condition: weatherCodeToCondition(res.daily.weather_code[i]), rainProbability: res.daily.precipitation_probability_max[i]))
         }
         
-        return WeatherData(city: city, current: current, hourly: hourly, daily: daily)
+        return WeatherData(city: location.name, current: current, hourly: hourly, daily: daily)
     }
     
     private func weatherCodeToText(_ code: Int) -> String {
         switch code {
-        case 0: return "Cielo Sereno"
-        case 1, 2, 3: return "Parzialmente Nuvoloso"
+        case 0: return "Sereno"
+        case 1, 2, 3: return "Nuvoloso"
         case 45, 48: return "Nebbia"
         case 51, 53, 55: return "Pioggerellina"
         case 61, 63, 65: return "Pioggia"
