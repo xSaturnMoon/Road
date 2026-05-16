@@ -42,14 +42,25 @@ jobs:
           cp -r build/Bloom.xcarchive/Products/Applications/Bloom.app Payload/
           zip -r Bloom.ipa Payload
           
-      - name: Create Release
+      - name: Delete Old Release
+        run: |
+          gh release delete latest --yes || true
+          git tag -d latest || true
+          git push origin :refs/tags/latest || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create New Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: Latest Build
+          name: Bloom v1.0.2 (Ultima Build)
           files: Bloom.ipa
+          make_latest: true
           body: |
             Aggiornamento automatico di Bloom.
-            Versione: 1.0.2
+            - Sistema OTA stabilizzato.
+            - Calendario Mensile con headers.
+            - Bugfix build.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
