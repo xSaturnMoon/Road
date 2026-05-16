@@ -1,4 +1,4 @@
 {
-    "version": "1.2.11",
-    "notes": "Redesign Calendar UI. Add today button. Move add event button to day cards. Remove notifications from event creation and add to event edit. Add active border to current day. Change header background."
+    "version": "1.2.12",
+    "notes": "Add swipe to delete for events. Fix Today button logic. Move notification sound to Settings with audio preview. Enable multiple reminders per event."
 }

@@ -121,13 +121,8 @@ struct DayCardRow: View {
             } else {
                 VStack(spacing: 8) {
                     ForEach(events) { event in
-                        EventRowView(event: event) {
+                        SwipeableEventRow(event: event) {
                             selectedEvent = event
-                        }
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) {
-                                withAnimation { manager.deleteEvent(event) }
-                            } label: { Label("Elimina", systemImage: "trash") }
                         }
                     }
                 }
@@ -181,7 +176,7 @@ struct EventRowView: View {
                 }
                 Spacer()
                 
-                if event.reminderId != nil {
+                if !event.reminders.isEmpty || event.reminderId != nil {
                     Image(systemName: "bell.fill")
                         .font(.caption)
                         .foregroundColor(.orange)
@@ -203,26 +198,76 @@ struct EventRowView: View {
     }
 }
 
+struct SwipeableEventRow: View {
+    let event: BloomEvent
+    let onTap: () -> Void
+    @StateObject var manager = CalendarManager.shared
+    @State private var offset: CGFloat = 0
+    
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button {
+                withAnimation { manager.deleteEvent(event) }
+            } label: {
+                Image(systemName: "trash")
+                    .foregroundColor(.white)
+                    .frame(width: 60)
+                    .frame(maxHeight: .infinity)
+                    .background(Color.red)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+            
+            EventRowView(event: event, onTap: onTap)
+                .background(Color(uiColor: .secondarySystemGroupedBackground))
+                .offset(x: offset)
+                .gesture(
+                    DragGesture()
+                        .onChanged { gesture in
+                            if gesture.translation.width < 0 {
+                                offset = gesture.translation.width
+                            }
+                        }
+                        .onEnded { gesture in
+                            withAnimation {
+                                if offset < -50 {
+                                    if gesture.translation.width < -100 {
+                                        manager.deleteEvent(event)
+                                    } else {
+                                        offset = -70
+                                    }
+                                } else {
+                                    offset = 0
+                                }
+                            }
+                        }
+                )
+        }
+    }
+}
+
 struct EditEventView: View {
     @Environment(\.dismiss) var dismiss
     @State var event: BloomEvent
     @State private var title: String
     @State private var date: Date
     @State private var startTime: Date
-    @State private var reminderEnabled: Bool
-    @State private var reminderTime: Date
-    @State private var reminderSound: String
-    
-    let soundOptions = ["Predefinito", "Tri-tono", "Nota", "Aurora", "Basso"]
+    @State private var newReminderTime: Date
+    @State private var isAddingReminder: Bool = false
+    @State private var reminders: [EventReminder]
     
     init(event: BloomEvent) {
         self._event = State(initialValue: event)
         self._title = State(initialValue: event.title)
         self._date = State(initialValue: event.date)
         self._startTime = State(initialValue: event.startTime)
-        self._reminderEnabled = State(initialValue: event.reminderId != nil)
-        self._reminderTime = State(initialValue: event.reminderTime ?? event.startTime)
-        self._reminderSound = State(initialValue: event.reminderSound ?? "Predefinito")
+        self._newReminderTime = State(initialValue: event.startTime)
+        
+        var existingReminders = event.reminders
+        if existingReminders.isEmpty, let rt = event.reminderTime, let rid = event.reminderId {
+            existingReminders.append(EventReminder(time: rt, notificationId: rid))
+        }
+        self._reminders = State(initialValue: existingReminders)
     }
     
     var body: some View {
@@ -236,16 +281,36 @@ struct EditEventView: View {
                     DatePicker("Orario", selection: $startTime, displayedComponents: .hourAndMinute)
                 }
                 Section("Notifiche") {
-                    Toggle("Attiva Notifica", isOn: $reminderEnabled)
-                    if reminderEnabled {
-                        DatePicker("Orario Notifica", selection: $reminderTime, displayedComponents: .hourAndMinute)
-                        Picker("Suono", selection: $reminderSound) {
-                            ForEach(soundOptions, id: \.self) { sound in
-                                Text(sound).tag(sound)
+                    Toggle("Aggiungi Promemoria", isOn: $isAddingReminder)
+                    
+                    if isAddingReminder {
+                        DatePicker("Orario", selection: $newReminderTime, displayedComponents: .hourAndMinute)
+                        Button("Salva Promemoria") {
+                            let newReminder = EventReminder(time: newReminderTime, notificationId: "")
+                            reminders.append(newReminder)
+                            isAddingReminder = false
+                        }
+                    }
+                }
+                
+                if !reminders.isEmpty {
+                    Section("Promemoria Programmati") {
+                        ForEach(reminders) { reminder in
+                            HStack {
+                                Text(reminder.time.formatted(.dateTime.hour().minute()))
+                                Spacer()
+                                Button(role: .destructive) {
+                                    reminders.removeAll(where: { $0.id == reminder.id })
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .foregroundColor(.red)
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                     }
                 }
+                
                 Section {
                     Button(role: .destructive) {
                         CalendarManager.shared.deleteEvent(event)
@@ -264,13 +329,7 @@ struct EditEventView: View {
                         event.title = title
                         event.date = date
                         event.startTime = startTime
-                        if reminderEnabled {
-                            event.reminderTime = reminderTime
-                            event.reminderSound = reminderSound
-                        } else {
-                            event.reminderTime = nil
-                            event.reminderSound = nil
-                        }
+                        event.reminders = reminders
                         CalendarManager.shared.updateEvent(event)
                         dismiss()
                     }

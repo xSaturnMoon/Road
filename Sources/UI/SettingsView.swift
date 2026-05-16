@@ -1,4 +1,5 @@
 import SwiftUI
+import AudioToolbox
 
 // MARK: - Settings View
 
@@ -6,6 +7,15 @@ struct SettingsView: View {
     @StateObject var auth = AuthManager.shared
     @StateObject var updateManager = UpdateManager.shared
     @State private var showingAuthModal = false
+    @AppStorage("bloom_notification_sound") private var notificationSound: String = "Predefinito"
+    
+    let soundOptions: [(name: String, id: UInt32)] = [
+        ("Predefinito", 1005),
+        ("Tri-tono", 1005),
+        ("Nota", 1012),
+        ("Aurora", 1033),
+        ("Basso", 1007)
+    ]
 
     var body: some View {
         NavigationStack {
@@ -71,6 +81,19 @@ struct SettingsView: View {
                                 }
                             }
                             .padding(.vertical, 4)
+                        }
+                    }
+                }
+
+                Section("Notifiche") {
+                    Picker("Suono Promemoria", selection: $notificationSound) {
+                        ForEach(soundOptions, id: \.name) { sound in
+                            Text(sound.name).tag(sound.name)
+                        }
+                    }
+                    .onChange(of: notificationSound) { _, newValue in
+                        if let sound = soundOptions.first(where: { $0.name == newValue }) {
+                            AudioServicesPlaySystemSound(sound.id)
                         }
                     }
                 }

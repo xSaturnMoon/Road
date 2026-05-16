@@ -2,6 +2,12 @@ import Foundation
 import Combine
 import UserNotifications
 
+struct EventReminder: Identifiable, Codable, Equatable {
+    var id = UUID()
+    var time: Date
+    var notificationId: String
+}
+
 struct BloomEvent: Identifiable, Codable {
     var id = UUID()
     var title: String
@@ -10,9 +16,10 @@ struct BloomEvent: Identifiable, Codable {
     var endTime: Date?
     var hasEndTime: Bool = false
     var isCompleted: Bool = false
-    var reminderId: String?
-    var reminderTime: Date?
-    var reminderSound: String? = "Predefinito"
+    var reminderId: String? // Legacy
+    var reminderTime: Date? // Legacy
+    var reminderSound: String? = "Predefinito" // Legacy
+    var reminders: [EventReminder] = []
 }
 
 class CalendarManager: ObservableObject {
@@ -71,17 +78,19 @@ class CalendarManager: ObservableObject {
 
     func updateEvent(_ event: BloomEvent) {
         if let index = events.firstIndex(where: { $0.id == event.id }) {
-            // Rimuovi la vecchia notifica se esiste
-            if let rid = events[index].reminderId {
-                UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [rid])
+            // Rimuovi tutte le vecchie notifiche
+            let oldEvent = events[index]
+            var idsToRemove = oldEvent.reminders.map { $0.notificationId }
+            if let legacyId = oldEvent.reminderId { idsToRemove.append(legacyId) }
+            
+            if !idsToRemove.isEmpty {
+                UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: idsToRemove)
             }
             
             var updatedEvent = event
-            // Se l'utente ha impostato un reminderTime, programmiamo la notifica
-            if updatedEvent.reminderTime != nil {
-                scheduleNotification(for: &updatedEvent)
-            } else {
-                updatedEvent.reminderId = nil
+            // Programmiamo le nuove notifiche
+            for i in 0..<updatedEvent.reminders.count {
+                scheduleNotification(for: &updatedEvent, reminderIndex: i)
             }
             
             events[index] = updatedEvent
@@ -91,8 +100,11 @@ class CalendarManager: ObservableObject {
     }
 
     func deleteEvent(_ event: BloomEvent) {
-        if let rid = event.reminderId {
-            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [rid])
+        var idsToRemove = event.reminders.map { $0.notificationId }
+        if let legacyId = event.reminderId { idsToRemove.append(legacyId) }
+        
+        if !idsToRemove.isEmpty {
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: idsToRemove)
         }
         events.removeAll(where: { $0.id == event.id })
         saveLocalEvents()
@@ -120,16 +132,23 @@ class CalendarManager: ObservableObject {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
-    private func scheduleNotification(for event: inout BloomEvent) {
+    private func scheduleNotification(for event: inout BloomEvent, reminderIndex: Int? = nil) {
         let content = UNMutableNotificationContent()
         content.title = "Promemoria Bloom"
         content.body = "\(event.title) alle \(event.startTime.formatted(.dateTime.hour().minute()))"
         
-        // I suoni di sistema richiedono i file .caf nel bundle. Fallback su default.
-        content.sound = .default
+        let soundName = UserDefaults.standard.string(forKey: "bloom_notification_sound") ?? "Predefinito"
+        content.sound = .default // Fallback for unsupported custom sounds without bundle
 
         let cal = Calendar.current
-        let targetTime = event.reminderTime ?? event.startTime
+        var targetTime = event.startTime
+        
+        if let idx = reminderIndex, idx < event.reminders.count {
+            targetTime = event.reminders[idx].time
+        } else if let rt = event.reminderTime {
+            targetTime = rt
+        }
+        
         var components = cal.dateComponents([.year, .month, .day], from: event.date)
         let time = cal.dateComponents([.hour, .minute], from: targetTime)
         components.hour = time.hour
@@ -137,7 +156,13 @@ class CalendarManager: ObservableObject {
 
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         let id = UUID().uuidString
-        event.reminderId = id
+        
+        if let idx = reminderIndex, idx < event.reminders.count {
+            event.reminders[idx].notificationId = id
+        } else {
+            event.reminderId = id
+        }
+        
         let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
         UNUserNotificationCenter.current().add(request)
     }
