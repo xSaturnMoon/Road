@@ -5,42 +5,51 @@ struct CalendarView: View {
     @State private var showingAddEvent = false
     @State private var showingAllReminders = false
     
+    // Generate dates grouped by month for the next 12 months
+    var groupedDates: [(String, [Date])] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        var results: [(String, [Date])] = []
+        
+        // Let's show the next 6 months for a better balance
+        for monthOffset in 0..<6 {
+            guard let firstOfMonth = calendar.date(byAdding: .month, value: monthOffset, to: today),
+                  let monthRange = calendar.range(of: .day, in: .month, for: firstOfMonth) else { continue }
+            
+            let monthName = firstOfMonth.formatted(.dateTime.month(.wide).year().locale(Locale(identifier: "it_IT"))).capitalized
+            var monthDates: [Date] = []
+            
+            let startDay = (monthOffset == 0) ? calendar.component(.day, from: today) : 1
+            
+            for day in startDay...monthRange.count {
+                if let date = calendar.date(bySetting: .day, value: day, of: firstOfMonth) {
+                    monthDates.append(date)
+                }
+            }
+            
+            if !monthDates.isEmpty {
+                results.append((monthName, monthDates))
+            }
+        }
+        
+        return results
+    }
+    
     var body: some View {
         NavigationStack {
             ZStack {
                 Color(uiColor: .systemBackground).ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(spacing: 25) {
-                        // Header with Month
-                        HStack {
-                            Text(Date().formatted(.dateTime.month(.wide).year().locale(Locale(identifier: "it_IT"))).capitalized)
-                                .font(.title.bold())
-                            Spacer()
-                            
-                            Button {
-                                showingAllReminders = true
-                            } label: {
-                                Image(systemName: "bell.fill")
-                                    .font(.title3)
-                                    .foregroundColor(.orange)
-                                    .padding(10)
-                                    .background(.orange.opacity(0.1))
-                                    .clipShape(Circle())
+                    LazyVStack(spacing: 20, pinnedViews: [.sectionHeaders]) {
+                        ForEach(groupedDates, id: \.0) { monthName, dates in
+                            Section(header: MonthHeader(title: monthName)) {
+                                ForEach(dates, id: \.self) { date in
+                                    DayCardView(date: date)
+                                        .padding(.horizontal)
+                                }
                             }
                         }
-                        .padding(.horizontal)
-                        .padding(.top)
-                        
-                        // Continuous Day List (Like news+)
-                        // We show the next 30 days for simplicity and clarity
-                        VStack(spacing: 15) {
-                            ForEach(0..<31) { dayOffset in
-                                let day = Calendar.current.date(byAdding: .day, value: dayOffset, to: Date())!
-                                DayCardView(date: day)
-                            }
-                        }
-                        .padding(.horizontal)
                         
                         Spacer(minLength: 100)
                     }
@@ -49,12 +58,21 @@ struct CalendarView: View {
             .navigationTitle("Calendario")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        showingAllReminders = true
+                    } label: {
+                        Image(systemName: "bell.fill")
+                            .foregroundColor(.orange)
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         showingAddEvent = true
                     } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
+                        Image(systemName: "plus")
+                            .font(.headline)
                     }
                 }
             }
@@ -65,6 +83,21 @@ struct CalendarView: View {
                 AllRemindersView(isPresented: $showingAllReminders)
             }
         }
+    }
+}
+
+struct MonthHeader: View {
+    let title: String
+    
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.title2.bold())
+                .padding(.vertical, 10)
+                .padding(.horizontal, 20)
+            Spacer()
+        }
+        .background(.ultraThinMaterial)
     }
 }
 
@@ -84,7 +117,7 @@ struct DayCardView: View {
                         .font(.caption.bold())
                         .foregroundColor(isToday ? .blue : .secondary)
                     
-                    Text(date.formatted(.dateTime.day().month(.wide).locale(Locale(identifier: "it_IT"))))
+                    Text(date.formatted(.dateTime.day().locale(Locale(identifier: "it_IT"))))
                         .font(.title3.bold())
                 }
                 Spacer()
@@ -99,7 +132,7 @@ struct DayCardView: View {
                 }
             }
             
-            // Events List inside the card
+            // Events List
             if events.isEmpty {
                 Text("Nessun impegno")
                     .font(.subheadline)
@@ -135,24 +168,19 @@ struct DayCardView: View {
                                     .foregroundColor(event.isCompleted ? .green : .secondary)
                             }
                         }
-                        .padding(10)
+                        .padding(12)
                         .background(Color.primary.opacity(0.05))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) {
-                                withAnimation { manager.deleteEvent(event) }
-                            } label: { Label("Elimina", systemImage: "trash") }
-                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
                 }
             }
         }
         .padding()
         .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .clipShape(RoundedRectangle(cornerRadius: 22))
         .overlay(
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(isToday ? Color.blue.opacity(0.3) : Color.clear, lineWidth: 2)
+            RoundedRectangle(cornerRadius: 22)
+                .stroke(isToday ? Color.blue.opacity(0.4) : Color.clear, lineWidth: 2)
         )
     }
 }
@@ -168,16 +196,13 @@ struct AllRemindersView: View {
                     .sorted(by: { $0.date < $1.date })
                 
                 if futureReminders.isEmpty {
-                    Section {
-                        Text("Nessun promemoria attivo")
-                            .foregroundStyle(.secondary)
-                    }
+                    ContentUnavailableView("Nessun Promemoria", systemImage: "bell.slash", description: Text("Tutti i tuoi promemoria appariranno qui."))
                 } else {
                     ForEach(futureReminders) { event in
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(event.title).font(.headline)
-                                Text("\(event.date.formatted(.dateTime.day().month())) alle \(event.startTime.formatted(.dateTime.hour().minute()))")
+                                Text("\(event.date.formatted(.dateTime.day().month().locale(Locale(identifier: "it_IT")))) alle \(event.startTime.formatted(.dateTime.hour().minute()))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -187,7 +212,7 @@ struct AllRemindersView: View {
                     }
                 }
             }
-            .navigationTitle("Tutti i Promemoria")
+            .navigationTitle("Promemoria Attivi")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Chiudi") { isPresented = false }
@@ -209,7 +234,7 @@ struct AddEventView: View {
             Form {
                 Section("Cosa") {
                     TextField("Esempio: Visita medica", text: $title)
-                        .font(.title3)
+                        .font(.body)
                 }
                 
                 Section("Quando") {
@@ -222,6 +247,7 @@ struct AddEventView: View {
                 }
             }
             .navigationTitle("Aggiungi Impegno")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) { Button("Annulla") { isPresented = false } }
                 ToolbarItem(placement: .navigationBarTrailing) {
