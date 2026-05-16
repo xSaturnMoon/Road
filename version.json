@@ -1,4 +1,4 @@
 {
-    "version": "1.2.20",
-    "notes": "Ensure local session correctly sets friendCode and triggers sync on app startup."
+    "version": "1.2.21",
+    "notes": "Isolate cloud fetches so missing tables don't abort friendCode generation."
 }

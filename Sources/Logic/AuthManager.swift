@@ -141,36 +141,36 @@ class AuthManager: ObservableObject {
     private func syncAfterLogin() async {
         await MainActor.run { isSyncing = true }
 
-        do {
-            let cloudEvents = try await sb.fetchEvents()
+        // 1. Fetch or create friend code first! (So it never fails if tables are missing)
+        if let newFriendCode = try? await sb.fetchOrCreateProfile() {
+            await MainActor.run {
+                if self.currentUser != nil {
+                    self.currentUser?.friendCode = newFriendCode
+                    self.saveLocalSession(self.currentUser)
+                    ShoppingManager.shared.myCode = newFriendCode
+                }
+            }
+        }
+
+        // 2. Fetch Events
+        if let cloudEvents = try? await sb.fetchEvents() {
             let bloomEvents = cloudEvents.map { $0.toBloomEvent() }
             await MainActor.run {
                 CalendarManager.shared.replaceWithCloudData(bloomEvents)
             }
-            
-            // Assicurati che l'utente abbia un codice amico su Supabase
-            if let newFriendCode = try? await sb.fetchOrCreateProfile() {
-                await MainActor.run {
-                    if self.currentUser != nil {
-                        self.currentUser?.friendCode = newFriendCode
-                        self.saveLocalSession(self.currentUser)
-                        ShoppingManager.shared.myCode = newFriendCode
-                    }
-                }
-            }
+        }
 
-            let cloudItems = try await sb.fetchShoppingItems()
+        // 3. Fetch Items
+        if let cloudItems = try? await sb.fetchShoppingItems() {
             let shopItems = cloudItems.map { $0.toShoppingItem() }
             await MainActor.run {
                 ShoppingManager.shared.replaceWithCloudData(shopItems)
             }
+        }
 
-            await MainActor.run {
-                isSyncing = false
-                lastSyncDate = Date()
-            }
-        } catch {
-            await MainActor.run { isSyncing = false }
+        await MainActor.run {
+            isSyncing = false
+            lastSyncDate = Date()
         }
     }
 }
