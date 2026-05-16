@@ -123,11 +123,16 @@ struct SettingsView: View {
                 
                 // Info Section
                 Section {
-                    HStack {
-                        Text("Versione")
-                        Spacer()
-                        Text("1.0.0 (Bloom)")
-                            .foregroundStyle(.secondary)
+                    Button {
+                        UpdateManager.shared.checkForUpdates()
+                    } label: {
+                        HStack {
+                            Label("Verifica Aggiornamenti", systemImage: "arrow.clockwise.circle")
+                            Spacer()
+                            Text("v1.0.0")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     
                     Link(destination: URL(string: "https://github.com/xSaturnMoon/Bloom")!) {
