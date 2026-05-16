@@ -4,99 +4,86 @@ struct CalendarView: View {
     @StateObject var manager = CalendarManager.shared
     @State private var showingAddEvent = false
     @State private var showingAllReminders = false
+    @State private var selectedEvent: CalendarEvent?
     @State private var currentMonth = Date()
     
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color(uiColor: .systemBackground).ignoresSafeArea()
-                
-                VStack(spacing: 0) {
-                    // Month Selector Header
-                    HStack {
-                        Button {
-                            changeMonth(by: -1)
-                        } label: {
-                            Image(systemName: "chevron.left.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.secondary.opacity(0.5))
-                        }
-                        
-                        Spacer()
-                        
-                        Text(currentMonth.formatted(.dateTime.month(.wide).year().locale(Locale(identifier: "it_IT"))).capitalized)
-                            .font(.title2.bold())
-                        
-                        Spacer()
-                        
-                        Button {
-                            changeMonth(by: 1)
-                        } label: {
-                            Image(systemName: "chevron.right.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.secondary.opacity(0.5))
-                        }
+            VStack(spacing: 0) {
+                // Month Selector Header
+                HStack {
+                    Button { changeMonth(by: -1) } label: {
+                        Image(systemName: "chevron.left.circle.fill").font(.title2).foregroundColor(.secondary.opacity(0.5))
                     }
-                    .padding()
-                    .background(.ultraThinMaterial)
-                    
-                    // Agenda for the selected month
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            VStack(spacing: 15) {
-                                let days = daysInMonth(for: currentMonth)
-                                
-                                ForEach(days, id: \.self) { date in
-                                    DayCardView(date: date)
-                                        .id(date)
-                                }
-                            }
-                            .padding()
-                        }
-                        .onAppear {
-                            // Scroll to today if it's the current month
-                            if isCurrentMonth(currentMonth) {
-                                proxy.scrollTo(Calendar.current.startOfDay(for: Date()), anchor: .top)
-                            }
-                        }
-                        .onChange(of: currentMonth) { oldDate, newDate in
-                            if isCurrentMonth(newDate) {
-                                withAnimation {
-                                    proxy.scrollTo(Calendar.current.startOfDay(for: Date()), anchor: .top)
-                                }
+                    Spacer()
+                    Text(currentMonth.formatted(.dateTime.month(.wide).year().locale(Locale(identifier: "it_IT"))).capitalized)
+                        .font(.title2.bold())
+                    Spacer()
+                    Button { changeMonth(by: 1) } label: {
+                        Image(systemName: "chevron.right.circle.fill").font(.title2).foregroundColor(.secondary.opacity(0.5))
+                    }
+                }
+                .padding()
+                .background(.ultraThinMaterial)
+                
+                // Agenda List
+                List {
+                    let days = daysInMonth(for: currentMonth)
+                    ForEach(days, id: \.self) { date in
+                        Section {
+                            let events = manager.events(for: date)
+                            if events.isEmpty {
+                                Text("Nessun impegno")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .italic()
+                                    .listRowBackground(Color.clear)
                             } else {
-                                // Scroll to first day of the month
-                                if let firstDay = daysInMonth(for: newDate).first {
-                                    proxy.scrollTo(firstDay, anchor: .top)
+                                ForEach(events) { event in
+                                    EventRowView(event: event) {
+                                        selectedEvent = event
+                                    }
+                                    .swipeActions(edge: .trailing) {
+                                        Button(role: .destructive) {
+                                            withAnimation { manager.deleteEvent(event) }
+                                        } label: { Label("Elimina", systemImage: "trash") }
+                                    }
                                 }
                             }
+                        } header: {
+                            HStack {
+                                Text(date.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "it_IT"))).capitalized)
+                                Text(date.formatted(.dateTime.day().locale(Locale(identifier: "it_IT"))))
+                                if Calendar.current.isDateInToday(date) {
+                                    Text("OGGI").font(.caption2.bold()).padding(.horizontal, 6).padding(.vertical, 2).background(.blue).foregroundColor(.white).clipShape(Capsule())
+                                }
+                            }
+                            .font(.subheadline.bold())
+                            .foregroundColor(.primary)
                         }
                     }
                 }
+                .listStyle(.insetGrouped)
             }
             .navigationTitle("Calendario")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        showingAllReminders = true
-                    } label: {
-                        Image(systemName: "bell.fill")
-                            .foregroundColor(.orange)
+                    Button { showingAllReminders = true } label: {
+                        Image(systemName: "bell.fill").foregroundColor(.orange)
                     }
                 }
-                
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        showingAddEvent = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.headline)
+                    Button { showingAddEvent = true } label: {
+                        Image(systemName: "plus").font(.headline)
                     }
                 }
             }
             .sheet(isPresented: $showingAddEvent) {
                 AddEventView(isPresented: $showingAddEvent, initialDate: currentMonth)
+            }
+            .sheet(item: $selectedEvent) { event in
+                EditEventView(event: event)
             }
             .sheet(isPresented: $showingAllReminders) {
                 AllRemindersView(isPresented: $showingAllReminders)
@@ -106,9 +93,7 @@ struct CalendarView: View {
     
     func changeMonth(by value: Int) {
         if let newMonth = Calendar.current.date(byAdding: .month, value: value, to: currentMonth) {
-            withAnimation {
-                currentMonth = newMonth
-            }
+            withAnimation { currentMonth = newMonth }
         }
     }
     
@@ -116,104 +101,108 @@ struct CalendarView: View {
         let calendar = Calendar.current
         guard let range = calendar.range(of: .day, in: .month, for: date),
               let firstOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: date)) else { return [] }
-        
         return range.compactMap { day -> Date? in
             calendar.date(byAdding: .day, value: day - 1, to: firstOfMonth)
         }
     }
-    
-    func isCurrentMonth(_ date: Date) -> Bool {
-        Calendar.current.isDate(date, equalTo: Date(), toGranularity: .month)
-    }
 }
 
-struct DayCardView: View {
-    let date: Date
+struct EventRowView: View {
+    let event: CalendarEvent
+    let onTap: () -> Void
     @StateObject var manager = CalendarManager.shared
     
     var body: some View {
-        let events = manager.events(for: date)
-        let isToday = Calendar.current.isDateInToday(date)
-        
-        VStack(alignment: .leading, spacing: 12) {
+        Button(action: onTap) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(date.formatted(.dateTime.weekday(.wide).locale(Locale(identifier: "it_IT"))).capitalized)
-                        .font(.caption.bold())
-                        .foregroundColor(isToday ? .blue : .secondary)
+                    Text(event.title)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                        .strikethrough(event.isCompleted)
                     
-                    Text(date.formatted(.dateTime.day().locale(Locale(identifier: "it_IT"))))
-                        .font(.title3.bold())
+                    Text(event.startTime.formatted(.dateTime.hour().minute()))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if isToday {
-                    Text("OGGI")
-                        .font(.caption2.bold())
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.blue)
-                        .foregroundColor(.white)
-                        .clipShape(Capsule())
+                
+                if event.reminderId != nil {
+                    Image(systemName: "bell.fill")
+                        .font(.caption)
+                        .foregroundColor(.orange)
                 }
-            }
-            
-            if events.isEmpty {
-                Text("Nessun impegno")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .italic()
-            } else {
-                VStack(spacing: 8) {
-                    ForEach(events) { event in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(event.title)
-                                    .font(.headline)
-                                    .strikethrough(event.isCompleted)
-                                
-                                Text(event.startTime.formatted(.dateTime.hour().minute()))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            
-                            if event.reminderId != nil {
-                                Image(systemName: "bell.fill")
-                                    .font(.caption)
-                                    .foregroundColor(.orange)
-                            }
-                            
-                            Button {
-                                withAnimation {
-                                    manager.toggleComplete(event)
-                                }
-                            } label: {
-                                Image(systemName: event.isCompleted ? "checkmark.circle.fill" : "circle")
-                                    .foregroundColor(event.isCompleted ? .green : .secondary)
-                            }
-                        }
-                        .padding(12)
-                        .background(Color.primary.opacity(0.05))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) {
-                                withAnimation { manager.deleteEvent(event) }
-                            } label: { Label("Elimina", systemImage: "trash") }
-                        }
-                    }
+                
+                Button {
+                    withAnimation { manager.toggleComplete(event) }
+                } label: {
+                    Image(systemName: event.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(event.isCompleted ? .green : .secondary)
                 }
+                .buttonStyle(.plain)
             }
         }
-        .padding()
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 22))
-        .overlay(
-            RoundedRectangle(cornerRadius: 22)
-                .stroke(isToday ? Color.blue.opacity(0.4) : Color.clear, lineWidth: 2)
-        )
+        .buttonStyle(.plain)
     }
 }
 
+struct EditEventView: View {
+    @Environment(\.dismiss) var dismiss
+    @State var event: CalendarEvent
+    @State private var title: String
+    @State private var date: Date
+    @State private var startTime: Date
+    @State private var reminderEnabled: Bool
+    
+    init(event: CalendarEvent) {
+        self._event = State(initialValue: event)
+        self._title = State(initialValue: event.title)
+        self._date = State(initialValue: event.date)
+        self._startTime = State(initialValue: event.startTime)
+        self._reminderEnabled = State(initialValue: event.reminderId != nil)
+    }
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Cosa") {
+                    TextField("Titolo", text: $title)
+                }
+                Section("Quando") {
+                    DatePicker("Giorno", selection: $date, displayedComponents: .date)
+                    DatePicker("Orario", selection: $startTime, displayedComponents: .hourAndMinute)
+                }
+                Section("Notifiche") {
+                    Toggle("Avvisami con un suono", isOn: $reminderEnabled)
+                }
+                Section {
+                    Button(role: .destructive) {
+                        CalendarManager.shared.deleteEvent(event)
+                        dismiss()
+                    } label: {
+                        Text("Elimina Impegno")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+            .navigationTitle("Modifica Impegno")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) { Button("Annulla") { dismiss() } }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Salva") {
+                        CalendarManager.shared.deleteEvent(event) // Delete old and add new as a simple "edit"
+                        CalendarManager.shared.addEvent(title: title, date: date, startTime: startTime, endTime: nil, hasEndTime: false, reminderEnabled: reminderEnabled)
+                        dismiss()
+                    }
+                    .disabled(title.isEmpty)
+                }
+            }
+        }
+    }
+}
+
+// Keeping AddEventView and AllRemindersView from previous turn but ensuring consistency
 struct AllRemindersView: View {
     @Binding var isPresented: Bool
     @StateObject var manager = CalendarManager.shared
@@ -270,14 +259,11 @@ struct AddEventView: View {
             Form {
                 Section("Cosa") {
                     TextField("Esempio: Visita medica", text: $title)
-                        .font(.body)
                 }
-                
                 Section("Quando") {
                     DatePicker("Giorno", selection: $date, displayedComponents: .date)
                     DatePicker("Orario", selection: $startTime, displayedComponents: .hourAndMinute)
                 }
-                
                 Section("Notifiche") {
                     Toggle("Avvisami con un suono", isOn: $reminderEnabled)
                 }

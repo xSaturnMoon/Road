@@ -1,4 +1,4 @@
 {
-    "version": "1.0.2",
-    "notes": "Fix definitivi al sistema di aggiornamento OTA e all'interfaccia del calendario."
+    "version": "1.0.3",
+    "notes": "Ripristino swipe per eliminare eventi e aggiunta funzione di modifica impegni."
 }
