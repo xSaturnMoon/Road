@@ -7,9 +7,9 @@ class UpdateManager: ObservableObject {
     @Published var isUpdateAvailable = false
     @Published var latestVersion = ""
     @Published var releaseNotes = ""
-    @Published var downloadURL = "https://github.com/xSaturnMoon/Bloom/releases"
+    @Published var downloadURL = "itms-services://?action=download-manifest&url=https://raw.githubusercontent.com/xSaturnMoon/Bloom/main/manifest.plist"
     
-    private let currentVersion = "1.0.0" // This should match the version in the project
+    private let currentVersion = "1.0.0"
     
     func checkForUpdates() {
         // Point to a raw JSON file on your GitHub

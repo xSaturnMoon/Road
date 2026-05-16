@@ -24,36 +24,16 @@ struct ContentView: View {
                     .tag(3)
             }
             .tint(.blue)
-            
-            // Update Overlay
-            if updateManager.isUpdateAvailable {
-                VStack {
-                    Spacer()
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Aggiornamento Disponibile! (\(updateManager.latestVersion))")
-                                .font(.headline)
-                            Text("Tocca per scaricare l'ultima versione.")
-                                .font(.caption)
-                        }
-                        Spacer()
-                        Button("Scarica") {
-                            if let url = URL(string: updateManager.downloadURL) {
-                                UIApplication.shared.open(url)
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .clipShape(Capsule())
-                    }
-                    .padding()
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 15))
-                    .shadow(radius: 10)
-                    .padding()
-                    .padding(.bottom, 60)
+        }
+        .alert("Aggiornamento Disponibile", isPresented: $updateManager.isUpdateAvailable) {
+            Button("Scarica Ora") {
+                if let url = URL(string: updateManager.downloadURL) {
+                    UIApplication.shared.open(url)
                 }
-                .transition(.move(edge: .bottom))
             }
+            Button("Più Tardi", role: .cancel) { }
+        } message: {
+            Text("È disponibile la versione \(updateManager.latestVersion). Vuoi installarla ora per ricevere le ultime novità?")
         }
         .onAppear {
             updateManager.checkForUpdates()
