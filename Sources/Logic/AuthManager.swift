@@ -139,6 +139,17 @@ class AuthManager: ObservableObject {
             await MainActor.run {
                 CalendarManager.shared.replaceWithCloudData(bloomEvents)
             }
+            
+            // Assicurati che l'utente abbia un codice amico su Supabase
+            if let newFriendCode = try? await sb.fetchOrCreateProfile() {
+                await MainActor.run {
+                    if self.currentUser != nil {
+                        self.currentUser?.friendCode = newFriendCode
+                        self.saveLocalSession(self.currentUser)
+                        ShoppingManager.shared.myCode = newFriendCode
+                    }
+                }
+            }
 
             let cloudItems = try await sb.fetchShoppingItems()
             let shopItems = cloudItems.map { $0.toShoppingItem() }

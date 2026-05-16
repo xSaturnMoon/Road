@@ -8,6 +8,7 @@ class ShoppingManager: ObservableObject {
     @Published var friends: [Friend] = []
     @Published var observingFriend: Friend?
     @Published var observingItems: [ShoppingItem] = []
+    @Published var friendListStatus: String = ""
     @Published var myCode: String = ""
 
     private let itemsKey = "bloom_shopping_items"
@@ -115,7 +116,8 @@ class ShoppingManager: ObservableObject {
 
     func fetchItemsForFriend(_ friend: Friend) {
         observingFriend = friend
-        observingItems = [] // Loading state or clear old data
+        observingItems = []
+        friendListStatus = "In caricamento..."
         Task {
             do {
                 if let profile = try await sb.findProfileByCode(friend.code) {
@@ -123,9 +125,21 @@ class ShoppingManager: ObservableObject {
                     let domainItems = sbItems.map { $0.toShoppingItem() }
                     await MainActor.run {
                         self.observingItems = domainItems
+                        if domainItems.isEmpty {
+                            self.friendListStatus = "La lista è vuota (oppure i permessi Supabase bloccano la lettura)."
+                        } else {
+                            self.friendListStatus = ""
+                        }
+                    }
+                } else {
+                    await MainActor.run {
+                        self.friendListStatus = "Errore: Codice amico non trovato nel database."
                     }
                 }
             } catch {
+                await MainActor.run {
+                    self.friendListStatus = "Errore di rete o permessi (RLS): \(error.localizedDescription)"
+                }
                 print("Errore fetch lista amico: \(error)")
             }
         }

@@ -1,4 +1,4 @@
 {
-    "version": "1.2.18",
-    "notes": "Fix real-time updates for friend shopping lists by adding missing ObservedObject to FriendDetailView."
+    "version": "1.2.19",
+    "notes": "Ensure friendCode is correctly fetched for existing sessions. Add more descriptive error statuses to help debug Supabase RLS."
 }

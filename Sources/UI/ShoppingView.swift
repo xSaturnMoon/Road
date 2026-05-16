@@ -483,7 +483,7 @@ struct FriendDetailView: View {
     var body: some View {
         List {
             if manager.observingItems.isEmpty {
-                Text("In caricamento o lista vuota...")
+                Text(manager.friendListStatus)
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(manager.observingItems) { item in
