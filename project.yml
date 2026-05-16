@@ -1,6 +1,6 @@
 name: Bloom
 options:
-  bundleIdPrefix: com.xsaturnmoon.bloomapp
+  bundleIdPrefix: com.xsaturnmoon.bloom
 packages:
   ZIPFoundation:
     url: https://github.com/weichsel/ZIPFoundation
@@ -19,5 +19,5 @@ targets:
       - package: Swifter
     settings:
       INFOPLIST_FILE: Sources/Info.plist
-      PRODUCT_BUNDLE_IDENTIFIER: com.xsaturnmoon.bloomapp
+      PRODUCT_BUNDLE_IDENTIFIER: com.xsaturnmoon.bloom
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
