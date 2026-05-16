@@ -1,4 +1,4 @@
 {
-    "version": "1.2.2",
-    "notes": "Nuova UI Auth WOW: background dinamico Living Mesh, animazioni staggered e glassmorphism avanzato."
+    "version": "1.2.3",
+    "notes": "Fix critico build: ripristinate funzioni di condivisione spesa e risolti errori di compilazione Swift."
 }
