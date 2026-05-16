@@ -166,7 +166,8 @@ struct AddItemView: View {
             Form {
                 Section("Dettagli Prodotto") {
                     TextField("Nome prodotto", text: $name)
-                    TextField("Quantità (es. 2kg, 1 pacco)", text: $qty)
+                    TextField("Quantità", text: $qty)
+                        .keyboardType(.decimalPad)
                 }
             }
             .navigationTitle("Aggiungi Prodotto")
