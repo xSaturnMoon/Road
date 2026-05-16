@@ -286,6 +286,29 @@ class SupabaseManager {
         return user
     }
 
+    func refreshSession() async throws {
+        guard let refreshToken = KeychainHelper.read(key: "sb_refresh_token") else {
+            throw SupabaseError.notAuthenticated
+        }
+
+        let body: [String: Any] = ["refresh_token": refreshToken]
+        var req = makeRequest(path: "/auth/v1/token?grant_type=refresh_token", method: "POST")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        
+        guard let http = resp as? HTTPURLResponse, http.statusCode < 400 else {
+            throw SupabaseError.notAuthenticated // Refresh fallito
+        }
+
+        let r = try JSONDecoder().decode(SupabaseAuthResponse.self, from: data)
+        guard let token = r.accessToken, !token.isEmpty,
+              let newRefresh = r.refreshToken, !newRefresh.isEmpty,
+              let user = r.user else {
+            throw SupabaseError.apiError("Risposta non valida al refresh")
+        }
+        saveSession(token: token, refresh: newRefresh, uid: user.id)
+    }
+
     func signOut() async {
         guard let token = accessToken else { clearSession(); return }
         var req = makeRequest(path: "/auth/v1/logout", method: "POST")
@@ -354,29 +377,46 @@ class SupabaseManager {
         return req
     }
 
+    private func performRequest<T>(req: URLRequest, attempt: Int = 1, handler: (Data) throws -> T) async throws -> T {
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            try checkStatus(data: data, response: resp)
+            return try handler(data)
+        } catch SupabaseError.httpError(401) where attempt == 1 {
+            // Token scaduto! Proviamo a rinfrescarlo
+            try await refreshSession()
+            var newReq = req
+            if let token = self.accessToken {
+                newReq.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
+            return try await performRequest(req: newReq, attempt: 2, handler: handler)
+        }
+    }
+
     private func get<T: Decodable>(path: String) async throws -> T {
         let req = makeRequest(path: path)
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        try checkStatus(data: data, response: resp)
-        return try JSONDecoder().decode(T.self, from: data)
+        return try await performRequest(req: req) { data in
+            try JSONDecoder().decode(T.self, from: data)
+        }
     }
 
     private func postVoid(path: String, body: [String: Any], prefer: String? = nil) async throws {
         var req = makeRequest(path: path, method: "POST")
         if let p = prefer { req.setValue(p, forHTTPHeaderField: "Prefer") }
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        try checkStatus(data: data, response: resp)
+        let _: Data = try await performRequest(req: req) { $0 }
     }
 
     private func delete(path: String) async throws {
         let req = makeRequest(path: path, method: "DELETE")
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        try checkStatus(data: data, response: resp)
+        let _: Data = try await performRequest(req: req) { $0 }
     }
 
     private func checkStatus(data: Data, response: URLResponse) throws {
         guard let http = response as? HTTPURLResponse else { return }
+        if http.statusCode == 401 {
+            throw SupabaseError.httpError(401) // Catchato da performRequest per il refresh
+        }
         if http.statusCode >= 400 {
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 let msg = json["message"] as? String ?? json["msg"] as? String ?? json["error_description"] as? String
@@ -423,8 +463,8 @@ class SupabaseManager {
 
     private func getRaw(path: String) async throws -> [[String: Any]] {
         let req = makeRequest(path: path)
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        try checkStatus(data: data, response: resp)
-        return (try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]) ?? []
+        return try await performRequest(req: req) { data in
+            (try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]) ?? []
+        }
     }
 }

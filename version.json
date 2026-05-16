@@ -1,4 +1,4 @@
 {
-    "version": "1.2.23",
-    "notes": "Catch the exact Supabase error so we can debug the profiles RLS issue."
+    "version": "1.2.24",
+    "notes": "Implement automatic JWT token refresh to prevent session expiration issues."
 }
