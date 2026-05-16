@@ -1,4 +1,4 @@
 {
-    "version": "1.2.14",
-    "notes": "Remove UpdateManager popups. Fix Auth modal lifecycle on startup. Fix AuthView dark mode background. Update AllRemindersView to show accurate multi-reminders."
+    "version": "1.2.15",
+    "notes": "Replace notification sounds with a curated list of short, elegant, and professional tones."
 }
