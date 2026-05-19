@@ -52,7 +52,21 @@ class CalendarManager: ObservableObject {
 
     /// Called after login to replace local data with cloud data
     func replaceWithCloudData(_ cloudEvents: [BloomEvent]) {
-        events = cloudEvents
+        // Rimuovi tutte le vecchie notifiche locali pianificate
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        
+        var updatedEvents = cloudEvents
+        for i in 0..<updatedEvents.count {
+            // Riprogramma le notifiche per ogni promemoria attivo
+            for rIdx in 0..<updatedEvents[i].reminders.count {
+                scheduleNotification(for: &updatedEvents[i], reminderIndex: rIdx)
+            }
+            if updatedEvents[i].reminderTime != nil {
+                scheduleNotification(for: &updatedEvents[i])
+            }
+        }
+        
+        events = updatedEvents
         saveLocalEvents()
     }
 
@@ -152,6 +166,11 @@ class CalendarManager: ObservableObject {
         let time = cal.dateComponents([.hour, .minute], from: targetTime)
         components.hour = time.hour
         components.minute = time.minute
+
+        // Evita di programmare notifiche nel passato
+        if let scheduledDate = cal.date(from: components), scheduledDate < Date() {
+            return
+        }
 
         let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         let id = UUID().uuidString

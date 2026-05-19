@@ -83,6 +83,12 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         }
     }
     
+    func replaceWithCloudLocations(_ cloudLocs: [WeatherLocation]) {
+        locations = cloudLocs
+        saveLocations()
+        refreshAll()
+    }
+    
     func requestLocation() {
         isLoading = true
         locationManager.requestWhenInUseAuthorization()
@@ -100,6 +106,7 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
                 if !self.locations.contains(where: { $0.name == cityName }) {
                     self.locations.insert(newLoc, at: 0)
                     self.saveLocations()
+                    self.syncToCloud(newLoc)
                 }
                 self.fetchWeather(for: newLoc)
             }
@@ -120,14 +127,24 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
             DispatchQueue.main.async {
                 self.locations.append(newLoc)
                 self.saveLocations()
+                self.syncToCloud(newLoc)
                 self.fetchWeather(for: newLoc)
             }
         }
     }
     
     func removeCity(at indexSet: IndexSet) {
+        let toDelete = indexSet.map { locations[$0] }
         locations.remove(atOffsets: indexSet)
         saveLocations()
+        for loc in toDelete {
+            Task { try? await SupabaseManager.shared.deleteWeatherLocation(id: loc.id) }
+        }
+    }
+    
+    private func syncToCloud(_ loc: WeatherLocation) {
+        guard SupabaseManager.shared.isAuthenticated else { return }
+        Task { try? await SupabaseManager.shared.upsertWeatherLocation(loc) }
     }
     
     func refreshAll() {

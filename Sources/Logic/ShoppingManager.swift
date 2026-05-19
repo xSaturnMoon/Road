@@ -65,6 +65,11 @@ class ShoppingManager: ObservableObject {
         saveLocalItems()
     }
 
+    func replaceWithCloudFriends(_ cloudFriends: [Friend]) {
+        friends = cloudFriends
+        saveFriends()
+    }
+
     // MARK: - CRUD (Local + Cloud)
 
     func addItem(name: String, quantity: String) {
@@ -111,6 +116,21 @@ class ShoppingManager: ObservableObject {
         if !friends.contains(where: { $0.code == code }) {
             friends.append(newFriend)
             saveFriends()
+            syncFriendToCloud(newFriend)
+        }
+    }
+
+    func removeFriend(_ friend: Friend) {
+        friends.removeAll(where: { $0.id == friend.id })
+        saveFriends()
+        Task { try? await sb.deleteFriend(id: friend.id) }
+    }
+
+    func updateFriend(_ friend: Friend) {
+        if let index = friends.firstIndex(where: { $0.id == friend.id }) {
+            friends[index] = friend
+            saveFriends()
+            syncFriendToCloud(friend)
         }
     }
 
@@ -150,5 +170,10 @@ class ShoppingManager: ObservableObject {
     private func syncToCloud(_ item: ShoppingItem) {
         guard sb.isAuthenticated else { return }
         Task { try? await sb.upsertShoppingItem(item) }
+    }
+
+    private func syncFriendToCloud(_ friend: Friend) {
+        guard sb.isAuthenticated else { return }
+        Task { try? await sb.upsertFriend(friend) }
     }
 }

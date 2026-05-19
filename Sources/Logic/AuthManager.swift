@@ -168,6 +168,22 @@ class AuthManager: ObservableObject {
             }
         }
 
+        // 4. Fetch Friends
+        if let cloudFriends = try? await sb.fetchFriends() {
+            let friends = cloudFriends.map { $0.toFriend() }
+            await MainActor.run {
+                ShoppingManager.shared.replaceWithCloudFriends(friends)
+            }
+        }
+
+        // 5. Fetch Weather Locations
+        if let cloudLocs = try? await sb.fetchWeatherLocations() {
+            let locs = cloudLocs.map { $0.toWeatherLocation() }
+            await MainActor.run {
+                WeatherManager.shared.replaceWithCloudLocations(locs)
+            }
+        }
+
         await MainActor.run {
             isSyncing = false
             lastSyncDate = Date()

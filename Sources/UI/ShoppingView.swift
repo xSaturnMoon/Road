@@ -462,8 +462,7 @@ struct FriendsListView: View {
                         }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
-                                manager.friends.removeAll(where: { $0.id == friend.id })
-                                manager.saveFriends()
+                                manager.removeFriend(friend)
                             } label: {
                                 Label("Elimina", systemImage: "trash")
                             }
@@ -490,11 +489,9 @@ struct FriendsListView: View {
                 TextField("Nuovo nome", text: $newName)
                 Button("Annulla", role: .cancel) { editingFriend = nil }
                 Button("Salva") {
-                    if let friend = editingFriend, !newName.isEmpty {
-                        if let index = manager.friends.firstIndex(where: { $0.id == friend.id }) {
-                            manager.friends[index].name = newName
-                            manager.saveFriends()
-                        }
+                    if var friend = editingFriend, !newName.isEmpty {
+                        friend.name = newName
+                        manager.updateFriend(friend)
                     }
                     editingFriend = nil
                 }

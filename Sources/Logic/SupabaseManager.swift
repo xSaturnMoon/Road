@@ -99,6 +99,7 @@ struct SupabaseEvent: Codable {
     let hasEndTime: Bool
     let isCompleted: Bool
     let reminderId: String?
+    let reminders: [EventReminder]?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -109,6 +110,7 @@ struct SupabaseEvent: Codable {
         case hasEndTime = "has_end_time"
         case isCompleted = "is_completed"
         case reminderId = "reminder_id"
+        case reminders
     }
 
     func toBloomEvent() -> BloomEvent {
@@ -121,7 +123,8 @@ struct SupabaseEvent: Codable {
             endTime: endTime.flatMap { fmt.date(from: $0) },
             hasEndTime: hasEndTime,
             isCompleted: isCompleted,
-            reminderId: reminderId
+            reminderId: reminderId,
+            reminders: reminders ?? []
         )
     }
 }
@@ -150,6 +153,51 @@ struct SupabaseShoppingItem: Codable {
     }
 }
 
+struct SupabaseFriend: Codable {
+    let id: String
+    let userId: String
+    let friendName: String
+    let friendCode: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case friendName = "friend_name"
+        case friendCode = "friend_code"
+    }
+
+    func toFriend() -> Friend {
+        Friend(
+            id: UUID(uuidString: id) ?? UUID(),
+            name: friendName,
+            code: friendCode
+        )
+    }
+}
+
+struct SupabaseWeatherLocation: Codable {
+    let id: String
+    let userId: String
+    let name: String
+    let lat: Double
+    let lon: Double
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case userId = "user_id"
+        case name, lat, lon
+    }
+
+    func toWeatherLocation() -> WeatherLocation {
+        WeatherLocation(
+            id: UUID(uuidString: id) ?? UUID(),
+            name: name,
+            lat: lat,
+            lon: lon
+        )
+    }
+}
+
 // MARK: - Model Extensions
 
 extension BloomEvent {
@@ -166,6 +214,13 @@ extension BloomEvent {
         ]
         if let et = endTime { dict["end_time"] = fmt.string(from: et) }
         if let rid = reminderId { dict["reminder_id"] = rid }
+        
+        // Codifica l'array dei promemoria in JSON
+        if let remindersData = try? JSONEncoder().encode(reminders),
+           let remindersVal = try? JSONSerialization.jsonObject(with: remindersData) {
+            dict["reminders"] = remindersVal
+        }
+        
         return dict
     }
 }
@@ -178,6 +233,29 @@ extension ShoppingItem {
             "name": name,
             "quantity": quantity,
             "is_checked": isChecked
+        ]
+    }
+}
+
+extension Friend {
+    func toSupabaseDict(userId: String) -> [String: Any] {
+        return [
+            "id": id.uuidString,
+            "user_id": userId,
+            "friend_name": name,
+            "friend_code": code
+        ]
+    }
+}
+
+extension WeatherLocation {
+    func toSupabaseDict(userId: String) -> [String: Any] {
+        return [
+            "id": id.uuidString,
+            "user_id": userId,
+            "name": name,
+            "lat": lat,
+            "lon": lon
         ]
     }
 }
@@ -361,6 +439,48 @@ class SupabaseManager {
 
     func deleteShoppingItem(id: UUID) async throws {
         try await delete(path: "/rest/v1/shopping_items?id=eq.\(id.uuidString)")
+    }
+
+    // MARK: - Friends CRUD
+
+    func fetchFriends() async throws -> [SupabaseFriend] {
+        guard let uid = userId else { throw SupabaseError.notAuthenticated }
+        return try await get(path: "/rest/v1/user_friends?user_id=eq.\(uid)&select=*")
+    }
+
+    func upsertFriend(_ friend: Friend) async throws {
+        guard let uid = userId else { throw SupabaseError.notAuthenticated }
+        let body = friend.toSupabaseDict(userId: uid)
+        try await postVoid(
+            path: "/rest/v1/user_friends",
+            body: body,
+            prefer: "resolution=merge-duplicates"
+        )
+    }
+
+    func deleteFriend(id: UUID) async throws {
+        try await delete(path: "/rest/v1/user_friends?id=eq.\(id.uuidString)")
+    }
+
+    // MARK: - Weather Locations CRUD
+
+    func fetchWeatherLocations() async throws -> [SupabaseWeatherLocation] {
+        guard let uid = userId else { throw SupabaseError.notAuthenticated }
+        return try await get(path: "/rest/v1/weather_locations?user_id=eq.\(uid)&select=*")
+    }
+
+    func upsertWeatherLocation(_ loc: WeatherLocation) async throws {
+        guard let uid = userId else { throw SupabaseError.notAuthenticated }
+        let body = loc.toSupabaseDict(userId: uid)
+        try await postVoid(
+            path: "/rest/v1/weather_locations",
+            body: body,
+            prefer: "resolution=merge-duplicates"
+        )
+    }
+
+    func deleteWeatherLocation(id: UUID) async throws {
+        try await delete(path: "/rest/v1/weather_locations?id=eq.\(id.uuidString)")
     }
 
     // MARK: - HTTP Helpers
