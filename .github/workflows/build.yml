@@ -56,6 +56,11 @@ jobs:
         with:
           xcode-version: 'latest-stable'
 
+      - name: Update Info.plist Version
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Sources/Info.plist
+
       - name: Install XcodeGen
         run: brew install xcodegen
 

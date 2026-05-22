@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var showUpdateAlert = false
     @State private var isCheckingUpdate = false
     @State private var updateInfo: UpdateInfo?
+    @StateObject private var downloader = IPADownloader()
     
     @AppStorage("theme") private var theme: String = "Sistema"
     @AppStorage("notificationSound") private var notificationSound: String = "Predefinito"
@@ -195,11 +196,9 @@ struct SettingsView: View {
                             .cornerRadius(12)
                             
                             Button("Installa") {
-                                if let encodedURL = info.url.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-                                   let installURL = URL(string: "livecontainer://install?url=\(encodedURL)") {
-                                    UIApplication.shared.open(installURL)
+                                if let url = URL(string: info.url) {
+                                    downloader.download(from: url)
                                 }
-                                showUpdateSheet = false
                             }
                             .font(.headline)
                             .foregroundColor(.white)
@@ -207,6 +206,25 @@ struct SettingsView: View {
                             .padding()
                             .background(Color.blue)
                             .cornerRadius(12)
+                            .disabled(downloader.isDownloading)
+                        }
+                        
+                        if downloader.isDownloading {
+                            VStack(spacing: 8) {
+                                ProgressView(value: downloader.progress)
+                                    .progressViewStyle(LinearProgressViewStyle(tint: .blue))
+                                Text("Scaricamento in corso... \(Int(downloader.progress * 100))%")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding()
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        } else if downloader.isFinished {
+                            Text("✅ IPA scaricata nei File (sostituita)")
+                                .font(.caption.bold())
+                                .foregroundColor(.green)
+                                .padding()
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                         }
                         .padding(.horizontal, 24)
                         .padding(.bottom, 24)
@@ -256,6 +274,48 @@ struct UpdateInfo: Codable {
     let version: String
     let notes: String
     let url: String
+}
+
+// MARK: - Downloader
+
+class IPADownloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
+    @Published var progress: Double = 0
+    @Published var isDownloading = false
+    @Published var isFinished = false
+    
+    func download(from url: URL) {
+        DispatchQueue.main.async {
+            self.isDownloading = true
+            self.progress = 0
+            self.isFinished = false
+        }
+        
+        let config = URLSessionConfiguration.default
+        let session = URLSession(configuration: config, delegate: self, delegateQueue: .main)
+        let task = session.downloadTask(with: url)
+        task.resume()
+    }
+    
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        if totalBytesExpectedToWrite > 0 {
+            DispatchQueue.main.async {
+                self.progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+            }
+        }
+    }
+    
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dest = docs.appendingPathComponent("Bloom.ipa")
+        
+        try? FileManager.default.removeItem(at: dest)
+        try? FileManager.default.moveItem(at: location, to: dest)
+        
+        DispatchQueue.main.async {
+            self.isDownloading = false
+            self.isFinished = true
+        }
+    }
 }
 
 // MARK: - Auth View (Glassmorphism Redesign)
