@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
-  "notes": "Prima versione stabile di Bloom.",
-  "url": "https://github.com/xSaturnMoon/Bloom/releases/latest/download/Bloom.ipa"
+  "version": "1.2.24",
+  "notes": "Implement automatic JWT token refresh to prevent session expiration issues.",
+  "url": "https://github.com/xSaturnMoon/Bloom/releases/download/latest/Bloom.ipa"
 }
