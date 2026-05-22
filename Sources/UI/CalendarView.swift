@@ -32,17 +32,31 @@ struct CalendarView: View {
                     
                     // Agenda List with Card Aesthetic
                     ScrollViewReader { proxy in
-                        List {
+                        ScrollView {
                             let days = daysInMonth(for: currentMonth)
-                            ForEach(days, id: \.self) { date in
-                                DayCardRow(date: date, selectedEvent: $selectedEvent, showingAddEvent: $showingAddEvent, selectedAddDate: $selectedAddDate)
-                                    .id(Calendar.current.startOfDay(for: date))
+                            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                                ForEach(days, id: \.self) { date in
+                                    DayCardRow(date: date, selectedEvent: $selectedEvent, showingAddEvent: $showingAddEvent, selectedAddDate: $selectedAddDate)
+                                        .id(Calendar.current.startOfDay(for: date))
+                                }
                             }
+                            .padding(.horizontal)
+                            .padding(.vertical, 12)
                         }
-                        .listStyle(.plain)
                         .background(Color.clear)
                         .id(currentMonth) // Force re-render on month change for animation
                         .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                        .onAppear {
+                            let now = Date()
+                            if Calendar.current.isDate(now, equalTo: currentMonth, toGranularity: .month) {
+                                let todayId = Calendar.current.startOfDay(for: now)
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                                    withAnimation {
+                                        proxy.scrollTo(todayId, anchor: .top)
+                                    }
+                                }
+                            }
+                        }
                         .onChange(of: currentMonth) { _, newMonth in
                             let now = Date()
                             if Calendar.current.isDate(now, equalTo: newMonth, toGranularity: .month) {
@@ -129,9 +143,10 @@ struct DayCardRow: View {
             
             if events.isEmpty {
                 Text("Nessun impegno")
-                    .font(.subheadline)
+                    .font(.caption)
                     .foregroundStyle(.secondary)
                     .italic()
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 VStack(spacing: 8) {
                     ForEach(events) { event in
@@ -162,11 +177,6 @@ struct DayCardRow: View {
             RoundedRectangle(cornerRadius: 20)
                 .stroke(isToday ? Color.blue : Color.clear, lineWidth: isToday ? 1.5 : 0)
         )
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .listRowInsets(EdgeInsets())
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
     }
 }
 
@@ -180,19 +190,20 @@ struct EventRowView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(event.title)
-                        .font(.headline)
+                        .font(.subheadline.bold())
                         .foregroundColor(.primary)
                         .strikethrough(event.isCompleted)
+                        .lineLimit(1)
                     
                     Text(event.startTime.formatted(.dateTime.hour().minute()))
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 
                 if !event.reminders.isEmpty || event.reminderId != nil {
                     Image(systemName: "bell.fill")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundColor(.orange)
                 }
                 
@@ -204,7 +215,7 @@ struct EventRowView: View {
                 }
                 .buttonStyle(.plain)
             }
-            .padding(12)
+            .padding(10)
             .background(Color.primary.opacity(0.05))
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
