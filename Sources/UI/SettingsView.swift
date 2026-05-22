@@ -208,23 +208,27 @@ struct SettingsView: View {
                             .cornerRadius(12)
                             .disabled(downloader.isDownloading)
                         }
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, downloader.isDownloading || downloader.isFinished ? 8 : 24)
                         
-                        if downloader.isDownloading {
-                            VStack(spacing: 8) {
-                                ProgressView(value: downloader.progress)
-                                    .progressViewStyle(LinearProgressViewStyle(tint: .blue))
-                                Text("Scaricamento in corso... \(Int(downloader.progress * 100))%")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding()
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                        } else if downloader.isFinished {
-                            Text("✅ IPA scaricata nei File (sostituita)")
-                                .font(.caption.bold())
-                                .foregroundColor(.green)
+                        Group {
+                            if downloader.isDownloading {
+                                VStack(spacing: 8) {
+                                    ProgressView(value: downloader.progress)
+                                        .progressViewStyle(LinearProgressViewStyle(tint: .blue))
+                                    Text("Scaricamento in corso... \(Int(downloader.progress * 100))%")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                                 .padding()
                                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            } else if downloader.isFinished {
+                                Text("✅ IPA scaricata nei File (sostituita)")
+                                    .font(.caption.bold())
+                                    .foregroundColor(.green)
+                                    .padding()
+                                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            }
                         }
                         .padding(.horizontal, 24)
                         .padding(.bottom, 24)
