@@ -44,10 +44,7 @@ struct SettingsView: View {
                     
                     // Account Section
                     Section("Account") {
-                        NavigationLink(destination: Text("Modifica Informazioni")) {
-                            Text("Modifica Informazioni")
-                        }
-                        NavigationLink(destination: Text("Cambia Password")) {
+                        NavigationLink(destination: ChangePasswordView()) {
                             Text("Cambia Password")
                         }
                         Button(role: .destructive) {
@@ -86,7 +83,7 @@ struct SettingsView: View {
                     HStack {
                         Text("Versione App")
                         Spacer()
-                        Text("1.0.0")
+                        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -99,6 +96,18 @@ struct SettingsView: View {
                         }
                     }
                     .pickerStyle(.menu)
+                    .onChange(of: notificationSound) { _, newValue in
+                        var id: UInt32 = 0
+                        switch newValue {
+                        case "Predefinito": id = 1005
+                        case "Campana": id = 1304
+                        case "Ding": id = 1054
+                        default: break
+                        }
+                        if id != 0 {
+                            AudioServicesPlaySystemSound(id)
+                        }
+                    }
                 }
                 
                 // Aggiornamenti Section
@@ -487,5 +496,76 @@ extension Color {
             blue: Double(b) / 255,
             opacity: 1
         )
+    }
+}
+
+// MARK: - Change Password View
+
+struct ChangePasswordView: View {
+    @StateObject var auth = AuthManager.shared
+    @Environment(\.dismiss) var dismiss
+    
+    @State private var oldPassword = ""
+    @State private var newPassword = ""
+    @State private var confirmPassword = ""
+    
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+    @State private var successMessage: String?
+    
+    var body: some View {
+        Form {
+            Section {
+                SecureField("Vecchia Password", text: $oldPassword)
+                SecureField("Nuova Password", text: $newPassword)
+                SecureField("Conferma Nuova Password", text: $confirmPassword)
+            }
+            
+            if let error = errorMessage {
+                Text(error).foregroundColor(.red).font(.footnote)
+            }
+            if let success = successMessage {
+                Text(success).foregroundColor(.green).font(.footnote)
+            }
+            
+            Button(action: changePassword) {
+                if isLoading {
+                    ProgressView()
+                } else {
+                    Text("Aggiorna Password")
+                }
+            }
+            .disabled(isLoading || oldPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty)
+        }
+        .navigationTitle("Cambia Password")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+    
+    func changePassword() {
+        guard newPassword == confirmPassword else {
+            errorMessage = "Le nuove password non corrispondono."
+            return
+        }
+        isLoading = true
+        errorMessage = nil
+        successMessage = nil
+        
+        Task {
+            do {
+                try await auth.changePassword(old: oldPassword, new: newPassword)
+                await MainActor.run {
+                    isLoading = false
+                    successMessage = "Password aggiornata con successo!"
+                    oldPassword = ""
+                    newPassword = ""
+                    confirmPassword = ""
+                }
+            } catch {
+                await MainActor.run {
+                    isLoading = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 }

@@ -395,6 +395,15 @@ class SupabaseManager {
         clearSession()
     }
 
+    func updatePassword(newPassword: String) async throws {
+        guard let token = accessToken else { throw SupabaseError.notAuthenticated }
+        let body: [String: Any] = ["password": newPassword]
+        var req = makeRequest(path: "/auth/v1/user", method: "PUT")
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        try checkStatus(data: data, response: resp)
+    }
+
     // MARK: - Calendar Events CRUD
 
     func fetchEvents() async throws -> [SupabaseEvent] {

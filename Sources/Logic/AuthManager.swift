@@ -136,6 +136,12 @@ class AuthManager: ObservableObject {
         }
     }
 
+    func changePassword(old: String, new: String) async throws {
+        guard let email = currentUser?.email else { throw SupabaseError.notAuthenticated }
+        _ = try await sb.signIn(email: email, password: old)
+        try await sb.updatePassword(newPassword: new)
+    }
+
     // MARK: - Cloud Sync
 
     private func syncAfterLogin() async {
