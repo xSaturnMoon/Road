@@ -7,104 +7,135 @@ struct SettingsView: View {
     @StateObject var auth = AuthManager.shared
     @StateObject var updateManager = UpdateManager.shared
     @State private var showingAuthModal = false
-    @AppStorage("bloom_notification_sound") private var notificationSound: String = "Predefinito"
+    @State private var showLogoutAlert = false
+    @State private var showUpdateSheet = false
     
-    let soundOptions: [(name: String, id: UInt32)] = [
-        ("Predefinito", 1005),
-        ("Nota (Breve ed Elegante)", 1012),
-        ("Basso (Discreto e Scuro)", 1007),
-        ("Messaggio (Corto e Pulito)", 1003),
-        ("Aurora (Vibrazione Leggera)", 1033),
-        ("Bloom (Armonioso e Morbido)", 1021),
-        ("Calypso (Delicato)", 1022),
-        ("Campanellino (Tink Rapido)", 1104),
-        ("Chime (Chiaro e Brillante)", 1304),
-        ("Pop (Soffocato e Veloce)", 1054)
-    ]
+    @AppStorage("theme") private var theme: String = "Sistema"
+    @AppStorage("notificationSound") private var notificationSound: String = "Predefinito"
+    
+    let themes = ["Sistema", "Chiaro", "Scuro"]
+    let sounds = ["Predefinito", "Nessuno", "Campana", "Ding"]
 
     var body: some View {
         NavigationStack {
-            List {
-                // Profile Section
-                Section {
-                    if let user = auth.currentUser {
-                        HStack(spacing: 14) {
+            Form {
+                if let user = auth.currentUser {
+                    // Profile Section
+                    Section {
+                        HStack(spacing: 12) {
                             ZStack {
                                 Circle()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [Color(hex: "4F8EF7"), Color(hex: "1A5FD4")],
-                                            startPoint: .topLeading, endPoint: .bottomTrailing
-                                        )
+                                    .fill(Color(UIColor.systemGray3))
+                                    .frame(width: 50, height: 50)
+                                    .overlay(
+                                        Circle().stroke(Color(UIColor.systemGray5), lineWidth: 1)
                                     )
-                                    .frame(width: 52, height: 52)
-                                Text(user.name.prefix(1).uppercased())
+                                Text(String(user.email.prefix(1)).uppercased())
                                     .font(.title2.bold())
-                                    .foregroundColor(.white)
+                                    .foregroundColor(.primary)
                             }
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(user.name)
-                                    .font(.headline)
-                                Text(user.email)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Button {
-                                auth.logout()
-                            } label: {
-                                Label("Esci", systemImage: "rectangle.portrait.and.arrow.right")
-                                    .font(.caption.bold())
-                                    .foregroundColor(.red)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 5)
-                                    .background(Color.red.opacity(0.1))
-                                    .clipShape(Capsule())
-                            }
+                            
+                            Text(user.email)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
-                        .padding(.vertical, 6)
-                    } else {
+                        .padding(.vertical, 4)
+                    }
+                    
+                    // Account Section
+                    Section("Account") {
+                        NavigationLink(destination: Text("Modifica Informazioni")) {
+                            Text("Modifica Informazioni")
+                        }
+                        NavigationLink(destination: Text("Cambia Password")) {
+                            Text("Cambia Password")
+                        }
+                        Button(role: .destructive) {
+                            showLogoutAlert = true
+                        } label: {
+                            Text("Esci")
+                                .foregroundStyle(.red)
+                        }
+                    }
+                } else {
+                    Section {
                         Button {
                             showingAuthModal = true
                         } label: {
-                            HStack(spacing: 14) {
+                            HStack {
                                 Image(systemName: "person.crop.circle.badge.plus")
                                     .font(.title2)
-                                    .foregroundStyle(
-                                        LinearGradient(
-                                            colors: [Color(hex: "4F8EF7"), Color(hex: "1A5FD4")],
-                                            startPoint: .top, endPoint: .bottom
-                                        )
-                                    )
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Accedi o Registrati")
-                                        .font(.headline)
-                                        .foregroundColor(.primary)
-                                    Text("I tuoi dati ti seguiranno ovunque")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
+                                Text("Accedi o Registrati")
                             }
-                            .padding(.vertical, 4)
                         }
                     }
                 }
-
-                Section("Notifiche") {
-                    Picker("Suono Promemoria", selection: $notificationSound) {
-                        ForEach(soundOptions, id: \.name) { sound in
-                            Text(sound.name).tag(sound.name)
+                
+                // App Section
+                Section("App") {
+                    NavigationLink(destination: Text("Icona App")) {
+                        Text("Icona App")
+                    }
+                    Picker("Tema", selection: $theme) {
+                        ForEach(themes, id: \.self) {
+                            Text($0)
                         }
                     }
-                    .onChange(of: notificationSound) { _, newValue in
-                        if let sound = soundOptions.first(where: { $0.name == newValue }) {
-                            AudioServicesPlaySystemSound(sound.id)
+                    .pickerStyle(.menu)
+                    
+                    HStack {
+                        Text("Versione App")
+                        Spacer()
+                        Text("1.0.0")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
+                // Sound Section
+                Section("Sound") {
+                    Picker("Suono Notifiche", selection: $notificationSound) {
+                        ForEach(sounds, id: \.self) {
+                            Text($0)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+                
+                // Aggiornamenti Section
+                Section("Aggiornamenti") {
+                    Button {
+                        showUpdateSheet = true
+                    } label: {
+                        HStack {
+                            Text("Controlla Aggiornamenti")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(Color(UIColor.tertiaryLabel))
                         }
                     }
                 }
-
             }
+            .formStyle(.grouped)
             .navigationTitle("Impostazioni")
+            .navigationBarTitleDisplayMode(.inline)
+            .alert("Conferma Uscita", isPresented: $showLogoutAlert) {
+                Button("Annulla", role: .cancel) { }
+                Button("Esci", role: .destructive) {
+                    auth.logout()
+                }
+            } message: {
+                Text("Sei sicuro di voler uscire dal tuo account?")
+            }
+            .sheet(isPresented: $showUpdateSheet) {
+                VStack {
+                    Text("Nessun aggiornamento disponibile")
+                        .font(.headline)
+                        .multilineTextAlignment(.center)
+                }
+                .presentationDetents([.medium, .large])
+            }
             .fullScreenCover(isPresented: $showingAuthModal) {
                 AuthView(isPresented: $showingAuthModal, isOptional: true)
             }
