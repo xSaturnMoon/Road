@@ -9,12 +9,15 @@ struct SettingsView: View {
     @State private var showingAuthModal = false
     @State private var showLogoutAlert = false
     @State private var showUpdateSheet = false
+    @State private var showUpdateAlert = false
+    @State private var isCheckingUpdate = false
+    @State private var updateInfo: UpdateInfo?
     
     @AppStorage("theme") private var theme: String = "Sistema"
     @AppStorage("notificationSound") private var notificationSound: String = "Predefinito"
     
     let themes = ["Sistema", "Chiaro", "Scuro"]
-    let sounds = ["Predefinito", "Nessuno", "Campana", "Ding"]
+    let sounds = ["Predefinito", "Nessuno", "Tri-tone", "Anticipate", "Bloom", "Calypso", "Chime", "Chord", "Descent", "Fanfare", "Glass", "Hero", "Horn", "Ladder", "Minuet", "News Flash", "Noir", "Sherwood Forest", "Spell", "Suspense", "Telegraph", "Tiptoes", "Typewriters", "Update"]
 
     var body: some View {
         NavigationStack {
@@ -100,8 +103,28 @@ struct SettingsView: View {
                         var id: UInt32 = 0
                         switch newValue {
                         case "Predefinito": id = 1005
-                        case "Campana": id = 1304
-                        case "Ding": id = 1054
+                        case "Tri-tone": id = 1007
+                        case "Chime": id = 1008
+                        case "Glass": id = 1009
+                        case "Horn": id = 1010
+                        case "Anticipate": id = 1013
+                        case "Bloom": id = 1014
+                        case "Calypso": id = 1015
+                        case "Minuet": id = 1020
+                        case "News Flash": id = 1021
+                        case "Sherwood Forest": id = 1022
+                        case "Telegraph": id = 1023
+                        case "Tiptoes": id = 1024
+                        case "Typewriters": id = 1025
+                        case "Update": id = 1026
+                        case "Chord": id = 1300
+                        case "Descent": id = 1301
+                        case "Fanfare": id = 1302
+                        case "Hero": id = 1303
+                        case "Ladder": id = 1304
+                        case "Noir": id = 1305
+                        case "Spell": id = 1306
+                        case "Suspense": id = 1307
                         default: break
                         }
                         if id != 0 {
@@ -113,15 +136,19 @@ struct SettingsView: View {
                 // Aggiornamenti Section
                 Section("Aggiornamenti") {
                     Button {
-                        showUpdateSheet = true
+                        checkForUpdates()
                     } label: {
                         HStack {
                             Text("Controlla Aggiornamenti")
                                 .foregroundColor(.primary)
                             Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(Color(UIColor.tertiaryLabel))
+                            if isCheckingUpdate {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(Color(UIColor.tertiaryLabel))
+                            }
                         }
                     }
                 }
@@ -138,18 +165,97 @@ struct SettingsView: View {
                 Text("Sei sicuro di voler uscire dal tuo account?")
             }
             .sheet(isPresented: $showUpdateSheet) {
-                VStack {
-                    Text("Nessun aggiornamento disponibile")
-                        .font(.headline)
-                        .multilineTextAlignment(.center)
+                if let info = updateInfo {
+                    VStack(spacing: 24) {
+                        Capsule()
+                            .fill(Color(UIColor.systemGray4))
+                            .frame(width: 40, height: 5)
+                            .padding(.top, 16)
+                        
+                        Text("Bloom")
+                            .font(.title2.bold())
+                        Text("Versione \(info.version)")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        Text(info.notes)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        
+                        Spacer()
+                        
+                        HStack(spacing: 16) {
+                            Button("Non ora") {
+                                showUpdateSheet = false
+                            }
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color(UIColor.systemGray5))
+                            .cornerRadius(12)
+                            
+                            Button("Installa") {
+                                if let encodedURL = info.url.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                                   let installURL = URL(string: "livecontainer://install?url=\(encodedURL)") {
+                                    UIApplication.shared.open(installURL)
+                                }
+                                showUpdateSheet = false
+                            }
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .cornerRadius(12)
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 24)
+                    }
+                    .presentationDetents([.medium])
                 }
-                .presentationDetents([.medium, .large])
+            }
+            .alert("Nessun aggiornamento", isPresented: $showUpdateAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Sei aggiornato! Stai usando l'ultima versione disponibile.")
             }
             .fullScreenCover(isPresented: $showingAuthModal) {
                 AuthView(isPresented: $showingAuthModal, isOptional: true)
             }
         }
     }
+    func checkForUpdates() {
+        isCheckingUpdate = true
+        Task {
+            do {
+                guard let url = URL(string: "https://raw.githubusercontent.com/xSaturnMoon/Bloom/main/update.json") else { return }
+                let (data, _) = try await URLSession.shared.data(from: url)
+                let info = try JSONDecoder().decode(UpdateInfo.self, from: data)
+                let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+                
+                await MainActor.run {
+                    self.isCheckingUpdate = false
+                    if info.version != currentVersion {
+                        self.updateInfo = info
+                        self.showUpdateSheet = true
+                    } else {
+                        self.showUpdateAlert = true
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isCheckingUpdate = false
+                    self.showUpdateAlert = true
+                }
+            }
+        }
+    }
+}
+
+struct UpdateInfo: Codable {
+    let version: String
+    let notes: String
+    let url: String
 }
 
 // MARK: - Auth View (Glassmorphism Redesign)
