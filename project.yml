@@ -10,6 +10,7 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+      - path: version.json
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: com.bloom.app
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

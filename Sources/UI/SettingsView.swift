@@ -17,6 +17,16 @@ struct SettingsView: View {
     @AppStorage("theme") private var theme: String = "Sistema"
     @AppStorage("notificationSound") private var notificationSound: String = "Predefinito"
     
+    private var appVersion: String {
+        if let url = Bundle.main.url(forResource: "version", withExtension: "json"),
+           let data = try? Data(contentsOf: url),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let version = json["version"] as? String {
+            return version
+        }
+        return Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+    }
+    
     let themes = ["Sistema", "Chiaro", "Scuro"]
     let sounds = ["Predefinito", "Nessuno", "Tri-tone", "Anticipate", "Bloom", "Calypso", "Chime", "Chord", "Descent", "Fanfare", "Glass", "Hero", "Horn", "Ladder", "Minuet", "News Flash", "Noir", "Sherwood Forest", "Spell", "Suspense", "Telegraph", "Tiptoes", "Typewriters", "Update"]
 
@@ -87,7 +97,7 @@ struct SettingsView: View {
                     HStack {
                         Text("Versione App")
                         Spacer()
-                        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
+                        Text(appVersion)
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -223,7 +233,7 @@ struct SettingsView: View {
                                 .padding()
                                 .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                             } else if downloader.isFinished {
-                                Text("✅ IPA scaricata nei File (sostituita)")
+                                Text("✅ Download completato!")
                                     .font(.caption.bold())
                                     .foregroundColor(.green)
                                     .padding()
@@ -253,7 +263,7 @@ struct SettingsView: View {
                 guard let url = URL(string: "https://raw.githubusercontent.com/xSaturnMoon/Bloom/main/update.json") else { return }
                 let (data, _) = try await URLSession.shared.data(from: url)
                 let info = try JSONDecoder().decode(UpdateInfo.self, from: data)
-                let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+                let currentVersion = appVersion
                 
                 await MainActor.run {
                     self.isCheckingUpdate = false
@@ -309,15 +319,20 @@ class IPADownloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
     }
     
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let dest = docs.appendingPathComponent("Bloom.ipa")
-        
-        try? FileManager.default.removeItem(at: dest)
-        try? FileManager.default.moveItem(at: location, to: dest)
+        let tempUrl = FileManager.default.temporaryDirectory.appendingPathComponent("Bloom.ipa")
+        try? FileManager.default.removeItem(at: tempUrl)
+        try? FileManager.default.moveItem(at: location, to: tempUrl)
         
         DispatchQueue.main.async {
             self.isDownloading = false
             self.isFinished = true
+            
+            // Present Share Sheet to save to Files (Downloads)
+            if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+               let root = scene.windows.first?.rootViewController {
+                let activityVC = UIActivityViewController(activityItems: [tempUrl], applicationActivities: nil)
+                root.present(activityVC, animated: true)
+            }
         }
     }
 }
