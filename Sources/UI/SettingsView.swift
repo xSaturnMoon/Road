@@ -337,7 +337,7 @@ class IPADownloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
     }
 }
 
-// MARK: - Auth View (Glassmorphism Redesign)
+// MARK: - Auth View (Native Redesign)
 
 struct AuthView: View {
     @Binding var isPresented: Bool
@@ -347,316 +347,102 @@ struct AuthView: View {
     @State private var name = ""
     @State private var password = ""
     @StateObject var auth = AuthManager.shared
-    @Environment(\.colorScheme) var colorScheme
-
-    @State private var cardScale: CGFloat = 0.92
-    @State private var cardOpacity: Double = 0
-    @State private var shakeOffset: CGFloat = 0
 
     var body: some View {
-        ZStack {
-            // ── Background ──────────────────────────────────────────
-            BlueBackground()
-                .ignoresSafeArea()
-
-            // ── Close Button (top-right) ────────────────────────────
-            if isOptional {
-                VStack {
-                    HStack {
-                        Spacer()
-                        Button { isPresented = false } label: {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.secondary)
-                                .padding(10)
-                                .background(.ultraThinMaterial, in: Circle())
-                        }
-                        .padding(.trailing, 20)
-                        .padding(.top, 16)
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Header
+                VStack(spacing: 16) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 44, weight: .regular))
+                        .foregroundColor(.white)
+                        .frame(width: 80, height: 80)
+                        .background(Color.blue, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .padding(.top, 32)
+                    
+                    Text("Bloom")
+                        .font(.system(.title, design: .rounded, weight: .semibold))
+                    
+                    Text(isLogin ? "Accedi per continuare" : "Crea un nuovo account")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    
+                    Picker("Modalità", selection: $isLogin) {
+                        Text("Accedi").tag(true)
+                        Text("Registrati").tag(false)
                     }
-                    Spacer()
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 32)
+                    .padding(.top, 12)
                 }
-            }
-
-            // ── Glass Card ──────────────────────────────────────────
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 0) {
-                    Spacer(minLength: 80)
-
-                    VStack(spacing: 28) {
-                        // Icon
-                        ZStack {
-                            Circle()
-                                .fill(.ultraThinMaterial)
-                                .frame(width: 88, height: 88)
-                                .overlay(
-                                    Circle().stroke(Color.white.opacity(0.25), lineWidth: 1)
-                                )
-                                .shadow(color: .black.opacity(0.12), radius: 12, y: 6)
-
-                            Image(systemName: isLogin ? "lock.shield.fill" : "person.fill.badge.plus")
-                                .font(.system(size: 36, weight: .semibold))
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [Color(hex: "6BAAFF"), Color(hex: "2A6FE8")],
-                                        startPoint: .top, endPoint: .bottom
-                                    )
-                                )
-                                .contentTransition(.symbolEffect(.replace))
+                .padding(.bottom, 16)
+                .background(Color(UIColor.systemGroupedBackground))
+                
+                // Form
+                Form {
+                    Section {
+                        if !isLogin {
+                            TextField("Nome completo", text: $name)
                         }
-
-                        // Titles
-                        VStack(spacing: 6) {
-                            Text(isLogin ? "Bentornato" : "Crea Account")
-                                .font(.system(size: 28, weight: .bold, design: .rounded))
-                                .foregroundColor(.primary)
-
-                            Text(isLogin
-                                 ? "Inserisci le credenziali per accedere"
-                                 : "Registrati per sincronizzare i tuoi dati")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-
-                        // Form
-                        VStack(spacing: 14) {
-                            if !isLogin {
-                                BloomField(
-                                    placeholder: "Nome completo",
-                                    icon: "person",
-                                    text: $name
-                                )
-                                .transition(.asymmetric(
-                                    insertion: .move(edge: .top).combined(with: .opacity),
-                                    removal: .move(edge: .top).combined(with: .opacity)
-                                ))
-                            }
-
-                            BloomField(
-                                placeholder: "Email",
-                                icon: "envelope",
-                                text: $email,
-                                keyboard: .emailAddress,
-                                autocap: .none
-                            )
-
-                            BloomField(
-                                placeholder: "Password",
-                                icon: "key",
-                                text: $password,
-                                isSecure: true
-                            )
-                        }
-                        .offset(x: shakeOffset)
-
-                        // Error message
+                        TextField("Email", text: $email)
+                            .keyboardType(.emailAddress)
+                            .autocapitalization(.none)
+                        SecureField("Password", text: $password)
+                    } footer: {
                         if let error = auth.authError {
-                            HStack(spacing: 6) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.red)
-                                Text(error)
-                                    .foregroundColor(.red)
-                            }
-                            .font(.footnote.weight(.medium))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 10)
-                            .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
-                            .transition(.scale(scale: 0.95).combined(with: .opacity))
+                            Text(error)
+                                .foregroundColor(.red)
                         }
-
-                        // Primary CTA
-                        Button { triggerAuth() } label: {
-                            Group {
-                                if auth.isLoading {
-                                    ProgressView().tint(.white)
-                                } else {
-                                    HStack(spacing: 8) {
-                                        Text(isLogin ? "Accedi" : "Crea Account")
-                                            .font(.system(size: 17, weight: .semibold))
-                                        Image(systemName: "arrow.right")
-                                            .font(.system(size: 15, weight: .semibold))
-                                    }
-                                }
+                    }
+                    
+                    Section {
+                        Button {
+                            triggerAuth()
+                        } label: {
+                            if auth.isLoading {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                            } else {
+                                Text(isLogin ? "Accedi" : "Crea Account")
+                                    .frame(maxWidth: .infinity, alignment: .center)
                             }
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 54)
-                            .background(
-                                LinearGradient(
-                                    colors: [Color(hex: "4F8EF7"), Color(hex: "1A5FD4")],
-                                    startPoint: .topLeading, endPoint: .bottomTrailing
-                                ),
-                                in: RoundedRectangle(cornerRadius: 16)
-                            )
-                            .shadow(color: Color(hex: "1A5FD4").opacity(0.4), radius: 12, y: 6)
                         }
                         .disabled(auth.isLoading || email.isEmpty || password.isEmpty)
-                        .opacity((auth.isLoading || email.isEmpty || password.isEmpty) ? 0.6 : 1)
-                        .scaleEffect(auth.isLoading ? 0.97 : 1.0)
-                        .animation(.spring(response: 0.3), value: auth.isLoading)
-
-                        // Toggle login/register
-                        Button {
-                            withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
-                                isLogin.toggle()
-                                auth.authError = nil
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text(isLogin ? "Non hai un account?" : "Hai già un account?")
-                                    .foregroundStyle(.secondary)
-                                Text(isLogin ? "Registrati" : "Accedi")
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(Color(hex: "4F8EF7"))
-                            }
-                            .font(.subheadline)
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets())
+                    }
+                }
+                .formStyle(.grouped)
+            }
+            .background(Color(UIColor.systemGroupedBackground))
+            .preferredColorScheme(.light)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if isOptional {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Annulla") {
+                            isPresented = false
                         }
                     }
-                    .padding(28)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 28)
-                            .stroke(Color.white.opacity(colorScheme == .dark ? 0.12 : 0.5), lineWidth: 1)
-                    )
-                    .shadow(color: .black.opacity(0.15), radius: 30, y: 10)
-                    .padding(.horizontal, 20)
-                    .scaleEffect(cardScale)
-                    .opacity(cardOpacity)
-
-                    Spacer(minLength: 40)
                 }
             }
-        }
-        .preferredColorScheme(nil)
-        .animation(.spring(response: 0.45, dampingFraction: 0.85), value: isLogin)
-        .onAppear {
-            withAnimation(.spring(response: 0.55, dampingFraction: 0.75)) {
-                cardScale  = 1.0
-                cardOpacity = 1.0
-            }
-        }
-        .onChange(of: auth.authError) { _, error in
-            if error != nil { performShake() }
-        }
-        .onChange(of: auth.currentUser?.id) { _, _ in
-            if auth.currentUser != nil {
-                withAnimation { isPresented = false }
+            .onChange(of: auth.currentUser?.id) { _, _ in
+                if auth.currentUser != nil {
+                    isPresented = false
+                }
             }
         }
     }
 
     private func triggerAuth() {
-        withAnimation { auth.authError = nil }
+        auth.authError = nil
         if isLogin {
             auth.login(email: email, password: password)
         } else {
             auth.signUp(email: email, name: name, password: password)
         }
-    }
-
-    private func performShake() {
-        let steps: [CGFloat] = [0, 12, -12, 9, -9, 5, -5, 0]
-        for (i, offset) in steps.enumerated() {
-            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.055) {
-                withAnimation(.spring(response: 0.12, dampingFraction: 0.3)) {
-                    shakeOffset = offset
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Background (Solo Blu, Light/Dark adaptive)
-
-private struct BlueBackground: View {
-    @Environment(\.colorScheme) var cs
-    @State private var phase1 = false
-    @State private var phase2 = false
-
-    var body: some View {
-        ZStack {
-            // Base color
-            (cs == .dark
-             ? Color.black
-             : Color(hex: "EEF4FF")
-            )
-
-            if cs != .dark {
-                // Blob 1
-                Circle()
-                    .fill(Color(hex: "BEDAFF").opacity(0.8))
-                    .frame(width: 380)
-                    .blur(radius: 70)
-                    .offset(x: phase1 ? -80 : 80, y: phase1 ? -160 : 80)
-                    .animation(.easeInOut(duration: 9).repeatForever(autoreverses: true), value: phase1)
-
-                // Blob 2
-                Circle()
-                    .fill(Color(hex: "A8C8FF").opacity(0.6))
-                    .frame(width: 320)
-                    .blur(radius: 60)
-                    .offset(x: phase2 ? 100 : -120, y: phase2 ? 200 : -120)
-                    .animation(.easeInOut(duration: 11).repeatForever(autoreverses: true), value: phase2)
-            }
-        }
-        .ignoresSafeArea()
-        .onAppear {
-            phase1 = true
-            phase2 = true
-        }
-    }
-}
-
-// MARK: - Glass Text Field
-
-struct BloomField: View {
-    var placeholder: String
-    var icon: String
-    @Binding var text: String
-    var keyboard: UIKeyboardType = .default
-    var autocap: UITextAutocapitalizationType = .sentences
-    var isSecure: Bool = false
-
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .medium))
-                .foregroundColor(focused ? Color(hex: "4F8EF7") : .secondary)
-                .frame(width: 24)
-                .animation(.easeInOut(duration: 0.2), value: focused)
-
-            Group {
-                if isSecure {
-                    SecureField(placeholder, text: $text)
-                        .focused($focused)
-                } else {
-                    TextField(placeholder, text: $text)
-                        .focused($focused)
-                        .keyboardType(keyboard)
-                        .autocapitalization(autocap)
-                }
-            }
-            .font(.system(size: 16))
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(.ultraThinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(
-                    focused
-                    ? Color(hex: "4F8EF7").opacity(0.6)
-                    : Color.white.opacity(0.18),
-                    lineWidth: 1.5
-                )
-        )
-        .animation(.easeInOut(duration: 0.2), value: focused)
     }
 }
 
