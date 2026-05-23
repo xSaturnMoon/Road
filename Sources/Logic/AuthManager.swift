@@ -112,8 +112,13 @@ class AuthManager: ObservableObject {
 
     func logout() {
         Task {
+            await MainActor.run { isSyncing = true }
+            // Force-upload EVERYTHING to cloud before clearing local storage.
+            // This saves any items whose background sync failed (e.g. expired token, network blip).
+            await uploadAllLocalToCloud()
             await sb.signOut()
             await MainActor.run {
+                self.isSyncing = false
                 self.currentUser = nil
                 self.saveLocalSession(nil)
                 // Clear ALL local user data so a new login starts fresh
@@ -123,6 +128,22 @@ class AuthManager: ObservableObject {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
         }
+    }
+
+    /// Force-uploads every piece of local data to Supabase.
+    /// Called before logout so nothing is silently lost due to failed background syncs.
+    private func uploadAllLocalToCloud() async {
+        guard sb.isAuthenticated else { return }
+
+        let localEvents  = await MainActor.run { CalendarManager.shared.events }
+        let localItems   = await MainActor.run { ShoppingManager.shared.items }
+        let localFriends = await MainActor.run { ShoppingManager.shared.friends }
+        let localLocs    = await MainActor.run { WeatherManager.shared.locations }
+
+        for event in localEvents  { try? await sb.upsertEvent(event) }
+        for item  in localItems   { try? await sb.upsertShoppingItem(item) }
+        for friend in localFriends { try? await sb.upsertFriend(friend) }
+        for loc   in localLocs    { try? await sb.upsertWeatherLocation(loc) }
     }
 
     func changePassword(old: String, new: String) async throws {

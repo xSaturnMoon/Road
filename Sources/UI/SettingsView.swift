@@ -169,11 +169,12 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .alert("Conferma Uscita", isPresented: $showLogoutAlert) {
                 Button("Annulla", role: .cancel) { }
-                Button("Esci", role: .destructive) {
+                Button(auth.isSyncing ? "Salvataggio..." : "Esci", role: .destructive) {
                     auth.logout()
                 }
+                .disabled(auth.isSyncing)
             } message: {
-                Text("Sei sicuro di voler uscire dal tuo account?")
+                Text("Prima di uscire, tutti i tuoi dati verranno salvati su Bloom Cloud.")
             }
             .sheet(isPresented: $showUpdateSheet) {
                 if let info = updateInfo {
