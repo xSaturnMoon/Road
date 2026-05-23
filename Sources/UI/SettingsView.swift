@@ -417,7 +417,6 @@ struct AuthView: View {
                 .formStyle(.grouped)
             }
             .background(Color(UIColor.systemGroupedBackground))
-            .preferredColorScheme(.light)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if isOptional {
