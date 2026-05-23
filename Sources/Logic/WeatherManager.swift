@@ -89,6 +89,13 @@ class WeatherManager: NSObject, ObservableObject, CLLocationManagerDelegate {
         refreshAll()
     }
     
+    /// Clears all local weather data — called on logout
+    func clearLocalData() {
+        locations = []
+        weatherData = [:]
+        UserDefaults.standard.removeObject(forKey: locationsKey)
+    }
+    
     func requestLocation() {
         isLoading = true
         locationManager.requestWhenInUseAuthorization()

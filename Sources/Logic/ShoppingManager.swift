@@ -70,6 +70,18 @@ class ShoppingManager: ObservableObject {
         saveFriends()
     }
 
+    /// Clears all local user data — called on logout to prevent cross-user data leakage
+    func clearLocalData() {
+        items = []
+        friends = []
+        observingFriend = nil
+        observingItems = []
+        myCode = ""
+        UserDefaults.standard.removeObject(forKey: itemsKey)
+        UserDefaults.standard.removeObject(forKey: friendsKey)
+        UserDefaults.standard.removeObject(forKey: "bloom_my_code")
+    }
+
     // MARK: - CRUD (Local + Cloud)
 
     func addItem(name: String, quantity: String) {

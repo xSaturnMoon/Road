@@ -61,26 +61,18 @@ class AuthManager: ObservableObject {
         Task {
             do {
                 let sbUser = try await sb.signIn(email: email, password: password)
-                var user = BloomUser(
+                let user = BloomUser(
                     name: sbUser.userMetadata?.name ?? email.components(separatedBy: "@").first ?? "Utente",
                     email: email,
                     supabaseId: sbUser.id
                 )
-                // Carica il codice amico permanente da Supabase
-                let friendCode = try? await sb.fetchOrCreateProfile()
-                user.friendCode = friendCode
-                let finalUser = user
                 await MainActor.run {
-                    self.currentUser = finalUser
-                    self.saveLocalSession(finalUser)
+                    self.currentUser = user
+                    self.saveLocalSession(user)
                     self.isLoading = false
-                    self.lastSyncDate = Date()
-                    // Aggiorna anche ShoppingManager con il codice definitivo
-                    if let code = friendCode {
-                        ShoppingManager.shared.myCode = code
-                    }
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 }
+                // syncAfterLogin handles fetchOrCreateProfile + all data sync
                 await syncAfterLogin()
             } catch {
                 await MainActor.run {
@@ -99,21 +91,15 @@ class AuthManager: ObservableObject {
         Task {
             do {
                 let sbUser = try await sb.signUp(email: email, password: password, name: name)
-                var user = BloomUser(name: name, email: email, supabaseId: sbUser.id)
-                // Crea il codice amico permanente su Supabase
-                let friendCode = try? await sb.fetchOrCreateProfile()
-                user.friendCode = friendCode
-                let finalUser = user
+                let user = BloomUser(name: name, email: email, supabaseId: sbUser.id)
                 await MainActor.run {
-                    self.currentUser = finalUser
-                    self.saveLocalSession(finalUser)
+                    self.currentUser = user
+                    self.saveLocalSession(user)
                     self.isLoading = false
-                    self.lastSyncDate = Date()
-                    if let code = friendCode {
-                        ShoppingManager.shared.myCode = code
-                    }
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                 }
+                // Sync after signup to create profile + upload any local data
+                await syncAfterLogin()
             } catch {
                 await MainActor.run {
                     self.authError = error.localizedDescription
@@ -130,7 +116,10 @@ class AuthManager: ObservableObject {
             await MainActor.run {
                 self.currentUser = nil
                 self.saveLocalSession(nil)
-                ShoppingManager.shared.myCode = ""
+                // Clear ALL local user data so a new login starts fresh
+                CalendarManager.shared.clearLocalData()
+                ShoppingManager.shared.clearLocalData()
+                WeatherManager.shared.clearLocalData()
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
         }
@@ -142,12 +131,12 @@ class AuthManager: ObservableObject {
         try await sb.updatePassword(newPassword: new)
     }
 
-    // MARK: - Cloud Sync
+    // MARK: - Cloud Sync (Merge Strategy)
 
-    private func syncAfterLogin() async {
+    func syncAfterLogin() async {
         await MainActor.run { isSyncing = true }
 
-        // 1. Fetch or create friend code first! (So it never fails if tables are missing)
+        // 1. Fetch/create friend code (single call)
         if let newFriendCode = try? await sb.fetchOrCreateProfile() {
             await MainActor.run {
                 if self.currentUser != nil {
@@ -158,35 +147,64 @@ class AuthManager: ObservableObject {
             }
         }
 
-        // 2. Fetch Events
+        // 2. Sync Calendar Events — merge: upload local-only, then replace
         if let cloudEvents = try? await sb.fetchEvents() {
-            let bloomEvents = cloudEvents.map { $0.toBloomEvent() }
+            let cloudBloomEvents = cloudEvents.map { $0.toBloomEvent() }
+            let localEvents = await MainActor.run { CalendarManager.shared.events }
+            let cloudIds = Set(cloudBloomEvents.map { $0.id })
+            let localOnly = localEvents.filter { !cloudIds.contains($0.id) }
+            // Upload local-only events to cloud so they are not lost
+            for event in localOnly {
+                try? await sb.upsertEvent(event)
+            }
+            let merged = cloudBloomEvents + localOnly
             await MainActor.run {
-                CalendarManager.shared.replaceWithCloudData(bloomEvents)
+                CalendarManager.shared.replaceWithCloudData(merged)
             }
         }
 
-        // 3. Fetch Items
+        // 3. Sync Shopping Items — merge: upload local-only, then replace
         if let cloudItems = try? await sb.fetchShoppingItems() {
-            let shopItems = cloudItems.map { $0.toShoppingItem() }
+            let cloudShopItems = cloudItems.map { $0.toShoppingItem() }
+            let localItems = await MainActor.run { ShoppingManager.shared.items }
+            let cloudIds = Set(cloudShopItems.map { $0.id })
+            let localOnly = localItems.filter { !cloudIds.contains($0.id) }
+            for item in localOnly {
+                try? await sb.upsertShoppingItem(item)
+            }
+            let merged = cloudShopItems + localOnly
             await MainActor.run {
-                ShoppingManager.shared.replaceWithCloudData(shopItems)
+                ShoppingManager.shared.replaceWithCloudData(merged)
             }
         }
 
-        // 4. Fetch Friends
+        // 4. Sync Friends — merge: upload local-only, then replace
         if let cloudFriends = try? await sb.fetchFriends() {
-            let friends = cloudFriends.map { $0.toFriend() }
+            let cloudFriendItems = cloudFriends.map { $0.toFriend() }
+            let localFriends = await MainActor.run { ShoppingManager.shared.friends }
+            let cloudIds = Set(cloudFriendItems.map { $0.id })
+            let localOnly = localFriends.filter { !cloudIds.contains($0.id) }
+            for friend in localOnly {
+                try? await sb.upsertFriend(friend)
+            }
+            let merged = cloudFriendItems + localOnly
             await MainActor.run {
-                ShoppingManager.shared.replaceWithCloudFriends(friends)
+                ShoppingManager.shared.replaceWithCloudFriends(merged)
             }
         }
 
-        // 5. Fetch Weather Locations
+        // 5. Sync Weather Locations — merge: upload local-only, then replace
         if let cloudLocs = try? await sb.fetchWeatherLocations() {
-            let locs = cloudLocs.map { $0.toWeatherLocation() }
+            let cloudLocItems = cloudLocs.map { $0.toWeatherLocation() }
+            let localLocs = await MainActor.run { WeatherManager.shared.locations }
+            let cloudIds = Set(cloudLocItems.map { $0.id })
+            let localOnly = localLocs.filter { !cloudIds.contains($0.id) }
+            for loc in localOnly {
+                try? await sb.upsertWeatherLocation(loc)
+            }
+            let merged = cloudLocItems + localOnly
             await MainActor.run {
-                WeatherManager.shared.replaceWithCloudLocations(locs)
+                WeatherManager.shared.replaceWithCloudLocations(merged)
             }
         }
 

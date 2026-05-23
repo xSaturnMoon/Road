@@ -50,6 +50,13 @@ class CalendarManager: ObservableObject {
         }
     }
 
+    /// Clears all local event data — called on logout to prevent cross-user data leakage
+    func clearLocalData() {
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        events = []
+        UserDefaults.standard.removeObject(forKey: eventsKey)
+    }
+
     /// Called after login to replace local data with cloud data
     func replaceWithCloudData(_ cloudEvents: [BloomEvent]) {
         // Rimuovi tutte le vecchie notifiche locali pianificate
