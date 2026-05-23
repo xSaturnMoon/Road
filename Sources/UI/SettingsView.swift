@@ -328,11 +328,12 @@ class IPADownloader: NSObject, ObservableObject, URLSessionDownloadDelegate {
             self.isDownloading = false
             self.isFinished = true
             
-            // Present Share Sheet to save to Files (Downloads)
+            // Present Document Picker to save to Files (Downloads)
             if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                let root = scene.windows.first?.rootViewController {
-                let activityVC = UIActivityViewController(activityItems: [tempUrl], applicationActivities: nil)
-                root.present(activityVC, animated: true)
+                let documentPicker = UIDocumentPickerViewController(forExporting: [tempUrl], asCopy: true)
+                documentPicker.allowsMultipleSelection = false
+                root.present(documentPicker, animated: true)
             }
         }
     }
