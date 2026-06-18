@@ -69,6 +69,6 @@
 		</dict>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Bloom ha bisogno della tua posizione per mostrare il meteo accurato della tua città.</string>
+	<string>Road ha bisogno della tua posizione per mostrarti la mappa e calcolare il percorso.</string>
 </dict>
 </plist>

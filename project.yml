@@ -1,11 +1,11 @@
-name: Bloom
+name: Road
 options:
-  bundleIdPrefix: com.bloom
+  bundleIdPrefix: com.road
   deploymentTarget:
     iOS: "17.0"
 
 targets:
-  Bloom:
+  Road:
     type: application
     platform: iOS
     sources:
@@ -13,20 +13,20 @@ targets:
       - path: version.json
       - path: Assets.xcassets
     settings:
-      PRODUCT_BUNDLE_IDENTIFIER: com.bloom.app
+      PRODUCT_BUNDLE_IDENTIFIER: com.road.app
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-      TARGETED_DEVICE_FAMILY: "1" # iPhone only
+      TARGETED_DEVICE_FAMILY: "1"
       IPHONEOS_DEPLOYMENT_TARGET: "17.0"
-      DEVELOPMENT_TEAM: "" # Empty for unsigned/sideload
+      DEVELOPMENT_TEAM: ""
       CODE_SIGN_STYLE: Manual
       CODE_SIGN_IDENTITY: ""
-      
+
     info:
       path: Sources/Info.plist
       properties:
-        CFBundleDisplayName: Bloom
-        CFBundleName: Bloom
+        CFBundleDisplayName: Road
+        CFBundleName: Road
         UILaunchStoryboardName: LaunchScreen
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         ITSAppUsesNonExemptEncryption: false
-        NSLocationWhenInUseUsageDescription: "Bloom ha bisogno della tua posizione per mostrarti il meteo locale."
+        NSLocationWhenInUseUsageDescription: "Road ha bisogno della tua posizione per mostrarti la mappa e calcolare il percorso."

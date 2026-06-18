@@ -1,9 +1,9 @@
 import SwiftUI
 
 @main
-struct BloomApp: App {
+struct RoadApp: App {
     @AppStorage("theme") private var theme: String = "Sistema"
-    
+
     var colorScheme: ColorScheme? {
         switch theme {
         case "Chiaro": return .light
@@ -11,7 +11,7 @@ struct BloomApp: App {
         default: return nil
         }
     }
-    
+
     var body: some Scene {
         WindowGroup {
             ContentView()
