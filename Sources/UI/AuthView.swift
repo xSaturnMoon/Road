@@ -91,7 +91,6 @@ struct AuthView: View {
                         Text("Premium Navigation for 125cc")
                             .font(.system(size: 15, weight: .medium))
                             .foregroundStyle(.white.opacity(0.5))
-                            .letterSpacing(0.5)
                     }
                 }
                 .padding(.bottom, 50)
@@ -223,14 +222,16 @@ struct AuthView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .background(
-                    selected
-                        ? LinearGradient(
-                            colors: [Color(hex: "4F46E5"), Color(hex: "7C3AED")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                        .in(RoundedRectangle(cornerRadius: 10))
-                        : nil
+                    Group {
+                        if selected {
+                            LinearGradient(
+                                colors: [Color(hex: "4F46E5"), Color(hex: "7C3AED")],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                        }
+                    }
                 )
                 .padding(4)
         }

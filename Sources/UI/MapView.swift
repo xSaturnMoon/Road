@@ -633,11 +633,6 @@ struct MapView: View {
         request.transportType = .automobile
         request.requestsAlternateRoutes = false
 
-        // Avoid highways and toll roads for 125cc motorcycles
-        if motorcycle.displacementCC <= 125 {
-            request.routePreference = .avoidHighways
-        }
-
         if let loc = locationManager.userLocation {
             request.source = MKMapItem(placemark: MKPlacemark(coordinate: loc))
         } else {
