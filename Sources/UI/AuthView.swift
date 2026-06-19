@@ -1,289 +1,230 @@
-import SwiftUI
+﻿import SwiftUI
 
 struct AuthView: View {
     @Binding var isPresented: Bool
     @StateObject private var auth = AuthManager.shared
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var isLogin = true
     @State private var email = ""
     @State private var name = ""
     @State private var password = ""
     @State private var confirmPassword = ""
+    @State private var appeared = false
     @FocusState private var focused: Field?
 
     enum Field { case email, name, password, confirm }
 
     var body: some View {
         ZStack {
-            // Premium gradient background
+            background
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 28) {
+                    header
+                    authCard
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 56)
+                .padding(.bottom, 40)
+            }
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.7, dampingFraction: 0.82)) {
+                appeared = true
+            }
+        }
+    }
+
+    private var background: some View {
+        ZStack {
             LinearGradient(
                 colors: [
-                    Color(hex: "0F0F1A"),
-                    Color(hex: "1A1A2E"),
-                    Color(hex: "16213E")
+                    Color(hex: "050508"),
+                    Color(hex: "0C1020"),
+                    Color(hex: "101828")
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
-            .ignoresSafeArea()
 
-            // Animated gradient orbs
-            ZStack {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(hex: "4F46E5").opacity(0.15), Color(hex: "7C3AED").opacity(0.08)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 350, height: 350)
-                    .blur(radius: 100)
-                    .offset(x: -100, y: -150)
+            Circle()
+                .fill(Color.blue.opacity(0.22))
+                .frame(width: 320, height: 320)
+                .blur(radius: 90)
+                .offset(x: -120, y: -260)
 
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color(hex: "06B6D4").opacity(0.12), Color(hex: "3B82F6").opacity(0.06)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 300, height: 300)
-                    .blur(radius: 90)
-                    .offset(x: 120, y: 100)
-            }
-            .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                Spacer()
-
-                // Premium logo section
-                VStack(spacing: 20) {
-                    // Logo with glow
-                    ZStack {
-                        Circle()
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color(hex: "4F46E5"), Color(hex: "7C3AED")],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .frame(width: 80, height: 80)
-                            .shadow(color: Color(hex: "4F46E5").opacity(0.4), radius: 20, x: 0, y: 10)
-
-                        Image(systemName: "road.lanes")
-                            .font(.system(size: 36, weight: .thin))
-                            .foregroundStyle(.white)
-                    }
-
-                    VStack(spacing: 8) {
-                        Text("Road")
-                            .font(.system(size: 42, weight: .bold, design: .rounded))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [.white, .white.opacity(0.9)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                        Text("Premium Navigation for 125cc")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.5))
-                    }
-                }
-                .padding(.bottom, 50)
-
-                // Premium glass card
-                VStack(spacing: 24) {
-                    // Premium segment control
-                    HStack(spacing: 0) {
-                        premiumSegBtn("Sign In", selected: isLogin) {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                                isLogin = true
-                            }
-                        }
-                        premiumSegBtn("Sign Up", selected: !isLogin) {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
-                                isLogin = false
-                            }
-                        }
-                    }
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14)
-                            .stroke(.white.opacity(0.1), lineWidth: 1)
-                    )
-
-                    if !isLogin {
-                        premiumField("Full Name", text: $name, icon: "person.fill")
-                            .focused($focused, equals: .name)
-                    }
-
-                    premiumField("Email Address", text: $email, icon: "envelope.fill", keyboard: .emailAddress)
-                        .focused($focused, equals: .email)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-
-                    premiumField("Password", text: $password, icon: "lock.fill", secure: true)
-                        .focused($focused, equals: .password)
-
-                    if !isLogin {
-                        premiumField("Confirm Password", text: $confirmPassword, icon: "lock.shield.fill", secure: true)
-                            .focused($focused, equals: .confirm)
-                    }
-
-                    if let err = auth.authError {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.red.opacity(0.9))
-                            Text(err)
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(.red.opacity(0.9))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .stroke(.red.opacity(0.2), lineWidth: 1)
-                        )
-                    }
-
-                    // Premium CTA button
-                    Button {
-                        focused = nil
-                        if isLogin {
-                            auth.login(email: email, password: password)
-                        } else {
-                            guard password == confirmPassword else {
-                                auth.authError = "Passwords do not match."
-                                return
-                            }
-                            auth.signUp(email: email, name: name, password: password)
-                        }
-                    } label: {
-                        ZStack {
-                            // Button background gradient
-                            LinearGradient(
-                                colors: [
-                                    Color(hex: "4F46E5"),
-                                    Color(hex: "7C3AED"),
-                                    Color(hex: "6366F1")
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                            .ignoresSafeArea()
-
-                            // Button content
-                            if auth.isLoading {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                    .scaleEffect(1.2)
-                            } else {
-                                Text(isLogin ? "Sign In" : "Create Account")
-                                    .font(.system(size: 17, weight: .semibold))
-                                    .foregroundStyle(.white)
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .shadow(color: Color(hex: "4F46E5").opacity(0.4), radius: 20, x: 0, y: 8)
-                    }
-                    .disabled(auth.isLoading)
-                    .buttonStyle(.plain)
-                }
-                .padding(28)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 28))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28)
-                        .stroke(.white.opacity(0.15), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.3), radius: 40, y: 20)
-                .padding(.horizontal, 24)
-
-                Spacer()
-                Spacer()
-            }
+            Circle()
+                .fill(Color.cyan.opacity(0.12))
+                .frame(width: 260, height: 260)
+                .blur(radius: 80)
+                .offset(x: 140, y: 120)
         }
+        .ignoresSafeArea()
     }
 
-    @ViewBuilder
-    func premiumSegBtn(_ label: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(selected ? .white : .white.opacity(0.5))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(
-                    Group {
-                        if selected {
-                            LinearGradient(
-                                colors: [Color(hex: "4F46E5"), Color(hex: "7C3AED")],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                        }
+    private var header: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .fill(.white.opacity(0.06))
+                    .frame(width: 88, height: 88)
+                    .glassEffect(.regular, in: Circle())
+
+                Image(systemName: "road.lanes")
+                    .font(.system(size: 36, weight: .thin))
+                    .foregroundStyle(.white.opacity(0.95))
+            }
+            .scaleEffect(appeared ? 1 : 0.88)
+            .opacity(appeared ? 1 : 0)
+
+            Text("Road")
+                .font(.system(size: 36, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
+
+            Text("Your premium 125cc navigator")
+                .font(.subheadline)
+                .foregroundStyle(.white.opacity(0.55))
+        }
+        .offset(y: appeared ? 0 : 16)
+        .opacity(appeared ? 1 : 0)
+    }
+
+    private var authCard: some View {
+        VStack(spacing: 18) {
+            HStack(spacing: 6) {
+                segmentButton("Sign In", selected: isLogin) {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) { isLogin = true }
+                }
+                segmentButton("Sign Up", selected: !isLogin) {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) { isLogin = false }
+                }
+            }
+            .padding(4)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 14))
+
+            VStack(spacing: 12) {
+                if !isLogin {
+                    authField("Full name", text: $name, icon: "person")
+                        .focused($focused, equals: .name)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
+                authField("Email", text: $email, icon: "envelope", keyboard: .emailAddress)
+                    .focused($focused, equals: .email)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+
+                authField("Password", text: $password, icon: "lock", secure: true)
+                    .focused($focused, equals: .password)
+
+                if !isLogin {
+                    authField("Confirm password", text: $confirmPassword, icon: "lock.fill", secure: true)
+                        .focused($focused, equals: .confirm)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.spring(response: 0.38, dampingFraction: 0.86), value: isLogin)
+
+            if let err = auth.authError {
+                Text(err)
+                    .font(.caption)
+                    .foregroundStyle(.red.opacity(0.9))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+            }
+
+            Button(action: submit) {
+                ZStack {
+                    if auth.isLoading {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text(isLogin ? "Continue" : "Create Account")
+                            .font(.system(size: 16, weight: .semibold))
                     }
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(
+                    LinearGradient(
+                        colors: [Color(hex: "3B82F6"), Color(hex: "2563EB")],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 16)
                 )
-                .padding(4)
+            }
+            .disabled(auth.isLoading)
+        }
+        .padding(22)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28))
+        .overlay(
+            RoundedRectangle(cornerRadius: 28)
+                .stroke(.white.opacity(0.14), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.28), radius: 30, y: 18)
+        .offset(y: appeared ? 0 : 24)
+        .opacity(appeared ? 1 : 0)
+    }
+
+    private func segmentButton(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(selected ? .white : .white.opacity(0.45))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background {
+                    if selected {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(.white.opacity(0.14))
+                    }
+                }
         }
         .buttonStyle(.plain)
     }
 
-    @ViewBuilder
-    func premiumField(_ placeholder: String, text: Binding<String>, icon: String, keyboard: UIKeyboardType = .default, secure: Bool = false) -> some View {
-        HStack(spacing: 14) {
-            // Icon with gradient background
-            ZStack {
-                LinearGradient(
-                    colors: [Color(hex: "4F46E5").opacity(0.2), Color(hex: "7C3AED").opacity(0.1)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+    private func authField(
+        _ placeholder: String,
+        text: Binding<String>,
+        icon: String,
+        keyboard: UIKeyboardType = .default,
+        secure: Bool = false
+    ) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(0.45))
+                .frame(width: 20)
 
-                Image(systemName: icon)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [Color(hex: "4F46E5"), Color(hex: "7C3AED")],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            }
-            .frame(width: 44, height: 44)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-
-            // Text field
             if secure {
                 SecureField(placeholder, text: text)
-                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(.white)
-                    .tint(Color(hex: "7C3AED"))
+                    .tint(.blue)
             } else {
                 TextField(placeholder, text: text)
-                    .font(.system(size: 16, weight: .medium))
                     .foregroundStyle(.white)
-                    .tint(Color(hex: "7C3AED"))
+                    .tint(.blue)
                     .keyboardType(keyboard)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .background(.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(.white.opacity(0.1), lineWidth: 1)
-        )
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private func submit() {
+        focused = nil
+        if isLogin {
+            auth.login(email: email, password: password)
+        } else {
+            guard password == confirmPassword else {
+                auth.authError = "Passwords do not match."
+                return
+            }
+            auth.signUp(email: email, name: name, password: password)
+        }
     }
 }
 

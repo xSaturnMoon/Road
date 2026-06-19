@@ -21,7 +21,8 @@ struct ContentView: View {
                     .tag(2)
             }
             .tint(.blue)
-            .opacity(appManager.isRouteActive ? 0 : 1)
+            .toolbar(appManager.isRouteActive ? .hidden : .visible, for: .tabBar)
+            .animation(.spring(response: 0.38, dampingFraction: 0.86), value: appManager.isRouteActive)
         }
         .fullScreenCover(isPresented: $showingAuth) {
             AuthView(isPresented: $showingAuth)
