@@ -147,7 +147,15 @@ struct MapView: View {
     }
 
     var body: some View {
-        mapStack
+        let view = ZStack(alignment: .top) {
+            mapLayer
+            menuDismissLayer
+            topChrome
+            styleMenuOverlay
+            searchResultsOverlay
+            routeOverlay
+        }
+        return view
             .onAppear {
                 locationManager.requestLocation()
                 centerOnUserIfNeeded(force: true)
@@ -171,18 +179,6 @@ struct MapView: View {
                 guard mapStyleMode == .theme else { return }
                 animateMapStyleChange()
             }
-    }
-
-    @ViewBuilder
-    private var mapStack: some View {
-        ZStack(alignment: .top) {
-            mapLayer
-            menuDismissLayer
-            topChrome
-            styleMenuOverlay
-            searchResultsOverlay
-            routeOverlay
-        }
     }
 
     // MARK: - Layers
@@ -648,7 +644,7 @@ struct MapView: View {
     }
 
     private func placeResult(from item: MKMapItem) -> PlaceResult? {
-        let coordinate = item.placemark.coordinate
+        let coordinate = item.location.coordinate
         return PlaceResult(
             name: item.name ?? "Place",
             subtitle: MapSearchFormatting.subtitle(for: item),
