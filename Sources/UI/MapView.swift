@@ -129,8 +129,8 @@ struct MapView: View {
                 ))
             }
         }
-        .onChange(of: locationManager.userLocation) { _, loc in
-            if let loc, selectedPlace == nil {
+        .onChange(of: locationManager.userLocation?.latitude) { _, _ in
+            if let loc = locationManager.userLocation, selectedPlace == nil {
                 cameraPosition = .region(MKCoordinateRegion(
                     center: loc,
                     latitudinalMeters: 3000,
