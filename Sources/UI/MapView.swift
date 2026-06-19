@@ -43,6 +43,7 @@ private enum MapAnimation {
     static let spring = Animation.spring(response: 0.42, dampingFraction: 0.86, blendDuration: 0.12)
     static let style = Animation.smooth(duration: 0.65)
     static let menu = Animation.spring(response: 0.38, dampingFraction: 0.82)
+    static let dropdown = Animation.smooth(duration: 0.25)
 }
 
 private let mapBarHeight: CGFloat = 44
@@ -112,6 +113,7 @@ struct MapView: View {
 
     @StateObject private var locationManager = LocationManager()
     @ObservedObject private var motorcycle = MotorcycleStore.shared
+    @ObservedObject private var appManager = AppManager.shared
 
     @AppStorage("map_style_mode") private var mapStyleModeRaw = MapStyleMode.standard.rawValue
 
@@ -123,6 +125,7 @@ struct MapView: View {
     @State private var searchText = ""
     @State private var isSearchActive = false
     @State private var searchResults: [PlaceResult] = []
+    @FocusState private var searchFieldFocused: Bool
 
     // Selected destination & route
     @State private var selectedPlace: PlaceResult? = nil
@@ -157,6 +160,13 @@ struct MapView: View {
             }
             .safeAreaPadding(.top)
 
+            if isSearchActive && !searchResults.isEmpty {
+                searchDropdown
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8 + mapBarHeight + 8)
+                    .safeAreaPadding(.top)
+            }
+
             if let info = routeInfo {
                 VStack {
                     Spacer()
@@ -186,14 +196,8 @@ struct MapView: View {
             guard motorcycle.isCustom, let place = selectedPlace else { return }
             calculateRoute(to: place)
         }
-        .onChange(of: locationManager.userLocation?.latitude) { _, _ in
-            if let loc = locationManager.userLocation, selectedPlace == nil {
-                cameraPosition = .region(MKCoordinateRegion(
-                    center: loc,
-                    latitudinalMeters: 3000,
-                    longitudinalMeters: 3000
-                ))
-            }
+        .onChange(of: routeInfo) { _, newValue in
+            appManager.isRouteActive = newValue != nil
         }
         .onChange(of: colorScheme) { _, _ in
             guard mapStyleMode == .theme else { return }
@@ -270,6 +274,7 @@ struct MapView: View {
                         isSearchActive = false
                         searchText = ""
                         searchResults = []
+                        searchFieldFocused = false
                     }
                 } label: {
                     Text("Cancel")
@@ -282,12 +287,6 @@ struct MapView: View {
         }
         .animation(MapAnimation.spring, value: isSearchActive)
         .animation(MapAnimation.menu, value: showMapStyleMenu)
-        .overlay(alignment: .topLeading) {
-            if isSearchActive && !searchResults.isEmpty {
-                searchDropdown
-                    .offset(y: mapBarHeight + 8)
-            }
-        }
     }
 
     private var searchField: some View {
@@ -301,6 +300,7 @@ struct MapView: View {
                     .font(.system(size: 15))
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
+                    .focused($searchFieldFocused)
                     .onChange(of: searchText) { _, val in triggerSearch(val) }
                     .onSubmit { triggerSearch(searchText) }
             } else {
@@ -327,7 +327,10 @@ struct MapView: View {
         .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: mapBarHeight / 2))
         .contentShape(RoundedRectangle(cornerRadius: mapBarHeight / 2))
         .onTapGesture {
-            withAnimation(MapAnimation.spring) { isSearchActive = true }
+            withAnimation(MapAnimation.spring) { 
+                isSearchActive = true
+                searchFieldFocused = true
+            }
         }
     }
 
@@ -438,6 +441,7 @@ struct MapView: View {
             insertion: .opacity.combined(with: .move(edge: .top)).combined(with: .scale(scale: 0.96, anchor: .top)),
             removal: .opacity.combined(with: .move(edge: .top))
         ))
+        .animation(MapAnimation.dropdown, value: searchResults.count)
     }
 
     // MARK: - Route Card
@@ -465,6 +469,7 @@ struct MapView: View {
                         selectedPlace = nil
                         routeInfo = nil
                         routePolyline = nil
+                        appManager.isRouteActive = false
                     }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -590,7 +595,7 @@ struct MapView: View {
 
         let search = MKLocalSearch(request: request)
         if let response = try? await search.start() {
-            withAnimation(MapAnimation.spring) {
+            withAnimation(MapAnimation.dropdown) {
                 searchResults = response.mapItems.prefix(5).map { item in
                     PlaceResult(
                         name: item.name ?? "Place",
@@ -608,6 +613,7 @@ struct MapView: View {
             isSearchActive = false
             searchText = ""
             searchResults = []
+            searchFieldFocused = false
             selectedPlace = place
         }
 
@@ -626,6 +632,11 @@ struct MapView: View {
         request.destination = MKMapItem(placemark: destination)
         request.transportType = .automobile
         request.requestsAlternateRoutes = false
+
+        // Avoid highways and toll roads for 125cc motorcycles
+        if motorcycle.displacementCC <= 125 {
+            request.routePreference = .avoidHighways
+        }
 
         if let loc = locationManager.userLocation {
             request.source = MKMapItem(placemark: MKPlacemark(coordinate: loc))

@@ -21,6 +21,7 @@ struct ContentView: View {
                     .tag(2)
             }
             .tint(.blue)
+            .opacity(appManager.isRouteActive ? 0 : 1)
         }
         .fullScreenCover(isPresented: $showingAuth) {
             AuthView(isPresented: $showingAuth)
