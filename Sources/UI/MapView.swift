@@ -146,94 +146,70 @@ struct MapView: View {
     }
 
     var body: some View {
-        mainContent
-            .onAppear {
-                locationManager.requestLocation()
-                centerOnUserIfNeeded(force: true)
-            }
-            .onChange(of: motorcycle.presetID) { _, _ in
-                if let place = selectedPlace { calculateRoute(to: place) }
-            }
-            .onChange(of: motorcycle.displacementCC) { _, _ in
-                guard motorcycle.isCustom, let place = selectedPlace else { return }
-                calculateRoute(to: place)
-            }
-            .onChange(of: motorcycle.stroke) { _, _ in
-                guard motorcycle.isCustom, let place = selectedPlace else { return }
-                calculateRoute(to: place)
-            }
-            .onChange(of: routeInfo) { _, newValue in
-                appManager.isRouteActive = newValue != nil
-            }
-            .onChange(of: colorScheme) { _, _ in
-                guard mapStyleMode == .theme else { return }
-                animateMapStyleChange()
-            }
-    }
-
-    private var mainContent: some View {
         ZStack(alignment: .top) {
             mapLayer
 
             if showMapStyleMenu {
-                tapToCloseMenu
+                Color.black.opacity(0.001)
+                    .ignoresSafeArea()
+                    .onTapGesture { closeMapStyleMenu() }
             }
 
-            topBarContainer
+            VStack(spacing: 0) {
+                topBar
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                Spacer()
+            }
+            .safeAreaPadding(.top)
 
             if showMapStyleMenu {
-                mapStyleMenuContainer
+                mapStyleMenu
+                    .padding(.trailing, 16)
+                    .padding(.top, 8 + mapBarHeight + 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .safeAreaPadding(.top)
+                    .allowsHitTesting(true)
             }
 
             if isSearchActive && !searchResults.isEmpty {
-                searchDropdownContainer
+                searchDropdown
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8 + mapBarHeight + 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .safeAreaPadding(.top)
             }
 
             if let info = routeInfo {
-                routeInfoContainer(info)
+                VStack {
+                    Spacer()
+                    routeCard(info)
+                }
+                .ignoresSafeArea(edges: .bottom)
             }
         }
-    }
-
-    private var tapToCloseMenu: some View {
-        Color.black.opacity(0.001)
-            .ignoresSafeArea()
-            .onTapGesture { closeMapStyleMenu() }
-    }
-
-    private var topBarContainer: some View {
-        VStack(spacing: 0) {
-            topBar
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-            Spacer()
+        .onAppear {
+            locationManager.requestLocation()
+            centerOnUserIfNeeded(force: true)
         }
-        .safeAreaPadding(.top)
-    }
-
-    private var mapStyleMenuContainer: some View {
-        mapStyleMenu
-            .padding(.trailing, 16)
-            .padding(.top, 8 + mapBarHeight + 8)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            .safeAreaPadding(.top)
-            .allowsHitTesting(true)
-    }
-
-    private var searchDropdownContainer: some View {
-        searchDropdown
-            .padding(.horizontal, 16)
-            .padding(.top, 8 + mapBarHeight + 8)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .safeAreaPadding(.top)
-    }
-
-    private func routeInfoContainer(_ info: RouteInfo) -> some View {
-        VStack {
-            Spacer()
-            routeCard(info)
+        .onChange(of: motorcycle.presetID) { _, _ in
+            if let place = selectedPlace { calculateRoute(to: place) }
         }
-        .ignoresSafeArea(edges: .bottom)
+        .onChange(of: motorcycle.displacementCC) { _, _ in
+            guard motorcycle.isCustom, let place = selectedPlace else { return }
+            calculateRoute(to: place)
+        }
+        .onChange(of: motorcycle.stroke) { _, _ in
+            guard motorcycle.isCustom, let place = selectedPlace else { return }
+            calculateRoute(to: place)
+        }
+        .onChange(of: routeInfo) { _, newValue in
+            appManager.isRouteActive = newValue != nil
+        }
+        .onChange(of: colorScheme) { _, _ in
+            guard mapStyleMode == .theme else { return }
+            animateMapStyleChange()
+        }
     }
 
     // MARK: - Map Layer
