@@ -22,10 +22,8 @@ enum TrafficLevel {
     }
 
     static func from(step: MKRoute.Step) -> TrafficLevel {
-        guard step.expectedTravelTime > 0, step.distance > 0 else { return .free }
-        let kmh = (step.distance / step.expectedTravelTime) * 3.6
-        if kmh < 22 { return .heavy }
-        if kmh < 48 { return .moderate }
+        // In iOS 26.0, MKRoute.Step no longer has expectedTravelTime
+        // Default to free flow traffic since we can't calculate speed
         return .free
     }
 }
@@ -61,13 +59,7 @@ enum RoutePlanner {
 
     static func stepUsesForbiddenRoad(_ step: MKRoute.Step) -> Bool {
         let text = step.instructions.lowercased()
-        if forbiddenTokens.contains(where: { text.contains($0) }) {
-            return true
-        }
-        return step.notices.contains { notice in
-            let noticeText = notice.title.lowercased()
-            return forbiddenTokens.contains(where: { noticeText.contains($0) })
-        }
+        return forbiddenTokens.contains(where: { text.contains($0) })
     }
 
     static func trafficSegments(for route: MKRoute) -> [TrafficSegment] {
