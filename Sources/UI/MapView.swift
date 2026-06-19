@@ -347,7 +347,9 @@ struct MapView: View {
 
     private func activateSearch() {
         withAnimation(MapAnimation.spring) { isSearchActive = true }
-        searchFieldFocused = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            searchFieldFocused = true
+        }
     }
 
     private func mapToolButton(icon: String, isActive: Bool, action: @escaping () -> Void) -> some View {
@@ -732,12 +734,13 @@ struct MapView: View {
 
 private enum MapSearchFormatting {
     static func subtitle(for item: MKMapItem) -> String {
-        if let short = item.address?.shortAddress, !short.isEmpty {
-            return short
-        }
-        if let full = item.address?.fullAddress, !full.isEmpty {
-            return full
-        }
+        let p = item.placemark
+        var parts: [String] = []
+        if let locality = p.locality { parts.append(locality) }
+        if let adminArea = p.administrativeArea { parts.append(adminArea) }
+        if let country = p.country { parts.append(country) }
+        if !parts.isEmpty { return parts.joined(separator: ", ") }
+        if let thoroughfare = p.thoroughfare { return thoroughfare }
         return ""
     }
 }
