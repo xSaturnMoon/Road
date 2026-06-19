@@ -21,9 +21,16 @@ enum TrafficLevel {
         }
     }
 
-    static func from(step: MKRoute.Step) -> TrafficLevel {
-        // In iOS 26.0, MKRoute.Step no longer has expectedTravelTime
-        // Default to free flow traffic since we can't calculate speed
+    static func from(step: MKRoute.Step, route: MKRoute) -> TrafficLevel {
+        guard route.distance > 0, route.expectedTravelTime > 0, step.distance > 0 else {
+            return .free
+        }
+        let routeKmh = (route.distance / route.expectedTravelTime) * 3.6
+        let stepShare = step.distance / route.distance
+        let estimatedStepKmh = max(8, routeKmh * (0.75 + stepShare))
+
+        if estimatedStepKmh < 22 { return .heavy }
+        if estimatedStepKmh < 48 { return .moderate }
         return .free
     }
 }
@@ -69,7 +76,7 @@ enum RoutePlanner {
             guard count > 0 else { return nil }
             var coords = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: count)
             step.polyline.getCoordinates(&coords, range: NSRange(location: 0, length: count))
-            return TrafficSegment(coordinates: coords, level: TrafficLevel.from(step: step))
+            return TrafficSegment(coordinates: coords, level: TrafficLevel.from(step: step, route: route))
         }
     }
 
