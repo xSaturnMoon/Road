@@ -146,75 +146,94 @@ struct MapView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
-            mapLayer
-            overlayContent
-        }
-        .onAppear {
-            locationManager.requestLocation()
-            centerOnUserIfNeeded(force: true)
-        }
-        .onChange(of: motorcycle.presetID) { _, _ in
-            if let place = selectedPlace { calculateRoute(to: place) }
-        }
-        .onChange(of: motorcycle.displacementCC) { _, _ in
-            guard motorcycle.isCustom, let place = selectedPlace else { return }
-            calculateRoute(to: place)
-        }
-        .onChange(of: motorcycle.stroke) { _, _ in
-            guard motorcycle.isCustom, let place = selectedPlace else { return }
-            calculateRoute(to: place)
-        }
-        .onChange(of: routeInfo) { _, newValue in
-            appManager.isRouteActive = newValue != nil
-        }
-        .onChange(of: colorScheme) { _, _ in
-            guard mapStyleMode == .theme else { return }
-            animateMapStyleChange()
-        }
+        mainContent
+            .onAppear {
+                locationManager.requestLocation()
+                centerOnUserIfNeeded(force: true)
+            }
+            .onChange(of: motorcycle.presetID) { _, _ in
+                if let place = selectedPlace { calculateRoute(to: place) }
+            }
+            .onChange(of: motorcycle.displacementCC) { _, _ in
+                guard motorcycle.isCustom, let place = selectedPlace else { return }
+                calculateRoute(to: place)
+            }
+            .onChange(of: motorcycle.stroke) { _, _ in
+                guard motorcycle.isCustom, let place = selectedPlace else { return }
+                calculateRoute(to: place)
+            }
+            .onChange(of: routeInfo) { _, newValue in
+                appManager.isRouteActive = newValue != nil
+            }
+            .onChange(of: colorScheme) { _, _ in
+                guard mapStyleMode == .theme else { return }
+                animateMapStyleChange()
+            }
     }
 
-    private var overlayContent: some View {
-        Group {
-            if showMapStyleMenu {
-                Color.black.opacity(0.001)
-                    .ignoresSafeArea()
-                    .onTapGesture { closeMapStyleMenu() }
-            }
-
-            VStack(spacing: 0) {
-                topBar
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                Spacer()
-            }
-            .safeAreaPadding(.top)
+    private var mainContent: some View {
+        ZStack(alignment: .top) {
+            mapLayer
 
             if showMapStyleMenu {
-                mapStyleMenu
-                    .padding(.trailing, 16)
-                    .padding(.top, 8 + mapBarHeight + 8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .safeAreaPadding(.top)
-                    .allowsHitTesting(true)
+                tapToCloseMenu
+            }
+
+            topBarContainer
+
+            if showMapStyleMenu {
+                mapStyleMenuContainer
             }
 
             if isSearchActive && !searchResults.isEmpty {
-                searchDropdown
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8 + mapBarHeight + 8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .safeAreaPadding(.top)
+                searchDropdownContainer
             }
 
             if let info = routeInfo {
-                VStack {
-                    Spacer()
-                    routeCard(info)
-                }
-                .ignoresSafeArea(edges: .bottom)
+                routeInfoContainer(info)
             }
         }
+    }
+
+    private var tapToCloseMenu: some View {
+        Color.black.opacity(0.001)
+            .ignoresSafeArea()
+            .onTapGesture { closeMapStyleMenu() }
+    }
+
+    private var topBarContainer: some View {
+        VStack(spacing: 0) {
+            topBar
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+            Spacer()
+        }
+        .safeAreaPadding(.top)
+    }
+
+    private var mapStyleMenuContainer: some View {
+        mapStyleMenu
+            .padding(.trailing, 16)
+            .padding(.top, 8 + mapBarHeight + 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .safeAreaPadding(.top)
+            .allowsHitTesting(true)
+    }
+
+    private var searchDropdownContainer: some View {
+        searchDropdown
+            .padding(.horizontal, 16)
+            .padding(.top, 8 + mapBarHeight + 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .safeAreaPadding(.top)
+    }
+
+    private func routeInfoContainer(_ info: RouteInfo) -> some View {
+        VStack {
+            Spacer()
+            routeCard(info)
+        }
+        .ignoresSafeArea(edges: .bottom)
     }
 
     // MARK: - Map Layer
@@ -635,10 +654,9 @@ struct MapView: View {
         if let response = try? await search.start() {
             searchResults = response.mapItems.prefix(5).map { item in
                 let location = item.placemark.location ?? CLLocation(latitude: item.placemark.coordinate.latitude, longitude: item.placemark.coordinate.longitude)
-                PlaceResult(
+                return PlaceResult(
                     name: item.name ?? "Place",
-                    subtitle: [item.placemark.locality, item.placemark.administrativeArea]
-                        .compactMap { $0 }.joined(separator: ", "),
+                    subtitle: "",
                     coordinate: location.coordinate
                 )
             }
