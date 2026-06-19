@@ -40,7 +40,7 @@ struct RouteInfo {
     let placeName: String
     let distanceKm: Double
     let travelMinutes: Int
-    let fuelLiters: Double  // ~4L/100km for a 125cc
+    let fuelLiters: Double
 
     var distanceString: String {
         distanceKm < 1 ? "\(Int(distanceKm * 1000)) m" : String(format: "%.1f km", distanceKm)
@@ -64,6 +64,7 @@ struct PlaceResult: Identifiable {
 
 struct MapView: View {
     @StateObject private var locationManager = LocationManager()
+    @ObservedObject private var motorcycle = MotorcycleStore.shared
 
     // Map camera
     @State private var cameraPosition: MapCameraPosition = .automatic
@@ -128,6 +129,19 @@ struct MapView: View {
                     longitudinalMeters: 3000
                 ))
             }
+        }
+        .onChange(of: motorcycle.presetID) { _, _ in
+            if let place = selectedPlace {
+                calculateRoute(to: place)
+            }
+        }
+        .onChange(of: motorcycle.displacementCC) { _, _ in
+            guard motorcycle.isCustom, let place = selectedPlace else { return }
+            calculateRoute(to: place)
+        }
+        .onChange(of: motorcycle.stroke) { _, _ in
+            guard motorcycle.isCustom, let place = selectedPlace else { return }
+            calculateRoute(to: place)
         }
         .onChange(of: locationManager.userLocation?.latitude) { _, _ in
             if let loc = locationManager.userLocation, selectedPlace == nil {
@@ -268,7 +282,7 @@ struct MapView: View {
                 }
             }
         }
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.15), lineWidth: 0.5))
         .shadow(color: .black.opacity(0.15), radius: 20, y: 8)
         .padding(.horizontal, 16)
@@ -295,7 +309,7 @@ struct MapView: View {
                     Text(info.placeName)
                         .font(.system(size: 17, weight: .semibold))
                         .lineLimit(1)
-                    Text("Solo strade consentite per 125cc")
+                    Text("Percorso per \(motorcycle.displayName)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -343,8 +357,7 @@ struct MapView: View {
             .padding(.horizontal, 20)
             .padding(.bottom, 12)
         }
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 24))
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
         .overlay(
             RoundedRectangle(cornerRadius: 24)
                 .stroke(.white.opacity(0.12), lineWidth: 0.5)
@@ -469,8 +482,9 @@ struct MapView: View {
                 self.routePolyline = route.polyline
 
                 let distKm = route.distance / 1000
-                let mins = Int(route.expectedTravelTime / 60)
-                let fuel = distKm * 0.04 // 4L/100km
+                let baseMins = Int(route.expectedTravelTime / 60)
+                let mins = self.motorcycle.travelMinutes(baseAutomobileMinutes: baseMins)
+                let fuel = self.motorcycle.fuelLiters(forDistanceKm: distKm)
 
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                     self.routeInfo = RouteInfo(
