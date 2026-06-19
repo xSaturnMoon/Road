@@ -147,6 +147,34 @@ struct MapView: View {
     }
 
     var body: some View {
+        mapStack
+            .onAppear {
+                locationManager.requestLocation()
+                centerOnUserIfNeeded(force: true)
+            }
+            .onChange(of: motorcycle.presetID) { _, _ in
+                guard let place = selectedPlace else { return }
+                calculateRoute(to: place)
+            }
+            .onChange(of: motorcycle.displacementCC) { _, _ in
+                guard motorcycle.isCustom, let place = selectedPlace else { return }
+                calculateRoute(to: place)
+            }
+            .onChange(of: motorcycle.stroke) { _, _ in
+                guard motorcycle.isCustom, let place = selectedPlace else { return }
+                calculateRoute(to: place)
+            }
+            .onChange(of: routeInfo) { _, newValue in
+                appManager.isRouteActive = newValue != nil
+            }
+            .onChange(of: colorScheme) { _, _ in
+                guard mapStyleMode == .theme else { return }
+                animateMapStyleChange()
+            }
+    }
+
+    @ViewBuilder
+    private var mapStack: some View {
         ZStack(alignment: .top) {
             mapLayer
             menuDismissLayer
@@ -154,29 +182,6 @@ struct MapView: View {
             styleMenuOverlay
             searchResultsOverlay
             routeOverlay
-        }
-        .onAppear {
-            locationManager.requestLocation()
-            centerOnUserIfNeeded(force: true)
-        }
-        .onChange(of: motorcycle.presetID) { _, _ in
-            guard let place = selectedPlace else { return }
-            calculateRoute(to: place)
-        }
-        .onChange(of: motorcycle.displacementCC) { _, _ in
-            guard motorcycle.isCustom, let place = selectedPlace else { return }
-            calculateRoute(to: place)
-        }
-        .onChange(of: motorcycle.stroke) { _, _ in
-            guard motorcycle.isCustom, let place = selectedPlace else { return }
-            calculateRoute(to: place)
-        }
-        .onChange(of: routeInfo) { _, newValue in
-            appManager.isRouteActive = newValue != nil
-        }
-        .onChange(of: colorScheme) { _, _ in
-            guard mapStyleMode == .theme else { return }
-            animateMapStyleChange()
         }
     }
 
@@ -643,11 +648,11 @@ struct MapView: View {
     }
 
     private func placeResult(from item: MKMapItem) -> PlaceResult? {
-        guard let location = item.location else { return nil }
+        let coordinate = item.placemark.coordinate
         return PlaceResult(
             name: item.name ?? "Place",
             subtitle: MapSearchFormatting.subtitle(for: item),
-            coordinate: location.coordinate
+            coordinate: coordinate
         )
     }
 
