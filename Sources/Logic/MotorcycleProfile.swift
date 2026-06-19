@@ -58,6 +58,17 @@ enum MotorcyclePresets {
         MotorcyclePreset(id: "bmw-r1250gs", brand: "BMW", model: "R 1250 GS", displacementCC: 1254, stroke: .fourStroke, fuelConsumptionL100: 5.8, travelTimeFactor: 0.93),
         // Ducati
         MotorcyclePreset(id: "ducati-monster937", brand: "Ducati", model: "Monster", displacementCC: 937, stroke: .fourStroke, fuelConsumptionL100: 6.2, travelTimeFactor: 0.92),
+        // Fantic
+        MotorcyclePreset(id: "fantic-caballero125", brand: "Fantic", model: "Caballero 125", displacementCC: 125, stroke: .fourStroke, fuelConsumptionL100: 3.6, travelTimeFactor: 1.03),
+        MotorcyclePreset(id: "fantic-performance125", brand: "Fantic", model: "Performance 125", displacementCC: 125, stroke: .fourStroke, fuelConsumptionL100: 3.8, travelTimeFactor: 1.02),
+        MotorcyclePreset(id: "fantic-xef125", brand: "Fantic", model: "XEF 125", displacementCC: 125, stroke: .fourStroke, fuelConsumptionL100: 3.7, travelTimeFactor: 1.03),
+        MotorcyclePreset(id: "fantic-xmf125", brand: "Fantic", model: "XMF 125", displacementCC: 125, stroke: .fourStroke, fuelConsumptionL100: 3.7, travelTimeFactor: 1.02),
+        MotorcyclePreset(id: "fantic-tracker125", brand: "Fantic", model: "Tracker 125", displacementCC: 125, stroke: .fourStroke, fuelConsumptionL100: 3.6, travelTimeFactor: 1.03),
+        MotorcyclePreset(id: "fantic-issimo125", brand: "Fantic", model: "Issimo 125", displacementCC: 125, stroke: .fourStroke, fuelConsumptionL100: 3.2, travelTimeFactor: 1.06),
+        MotorcyclePreset(id: "fantic-casa50", brand: "Fantic", model: "Casa 50", displacementCC: 50, stroke: .twoStroke, fuelConsumptionL100: 2.9, travelTimeFactor: 1.11),
+        MotorcyclePreset(id: "fantic-xxf250", brand: "Fantic", model: "XXF 250", displacementCC: 250, stroke: .fourStroke, fuelConsumptionL100: 4.5, travelTimeFactor: 1.0),
+        MotorcyclePreset(id: "fantic-xef250", brand: "Fantic", model: "XEF 250", displacementCC: 250, stroke: .fourStroke, fuelConsumptionL100: 4.6, travelTimeFactor: 0.99),
+        MotorcyclePreset(id: "fantic-xxf450", brand: "Fantic", model: "XXF 450", displacementCC: 450, stroke: .fourStroke, fuelConsumptionL100: 5.2, travelTimeFactor: 0.96),
         // Generic
         MotorcyclePreset(id: "generic-50", brand: "Generica", model: "50cc", displacementCC: 50, stroke: .twoStroke, fuelConsumptionL100: 2.8, travelTimeFactor: 1.12),
         MotorcyclePreset(id: "generic-125", brand: "Generica", model: "125cc", displacementCC: 125, stroke: .fourStroke, fuelConsumptionL100: 3.8, travelTimeFactor: 1.05),

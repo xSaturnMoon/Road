@@ -2,6 +2,51 @@ import SwiftUI
 import MapKit
 import CoreLocation
 
+// MARK: - Map Style
+
+enum MapStyleMode: String, CaseIterable, Identifiable {
+    case theme = "Theme"
+    case standard = "Standard"
+    case satellite = "Satellite"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .theme: return "circle.lefthalf.filled"
+        case .standard: return "map"
+        case .satellite: return "globe.americas.fill"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .theme: return "Follows device appearance"
+        case .standard: return "Classic road map"
+        case .satellite: return "Aerial imagery"
+        }
+    }
+
+    func style() -> MapStyle {
+        switch self {
+        case .theme:
+            return .standard(elevation: .flat, emphasis: .muted)
+        case .standard:
+            return .standard(elevation: .realistic)
+        case .satellite:
+            return .imagery(elevation: .realistic)
+        }
+    }
+}
+
+private enum MapAnimation {
+    static let spring = Animation.spring(response: 0.42, dampingFraction: 0.86, blendDuration: 0.12)
+    static let style = Animation.smooth(duration: 0.65)
+    static let menu = Animation.spring(response: 0.38, dampingFraction: 0.82)
+}
+
+private let mapBarHeight: CGFloat = 44
+
 // MARK: - Location Manager
 
 class LocationManager: NSObject, ObservableObject, CLLocationManagerDelegate {
@@ -63,55 +108,55 @@ struct PlaceResult: Identifiable {
 // MARK: - Map View
 
 struct MapView: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     @StateObject private var locationManager = LocationManager()
     @ObservedObject private var motorcycle = MotorcycleStore.shared
 
+    @AppStorage("map_style_mode") private var mapStyleModeRaw = MapStyleMode.standard.rawValue
+
     // Map camera
     @State private var cameraPosition: MapCameraPosition = .automatic
+    @State private var mapStylePhase: CGFloat = 1
 
     // Search
     @State private var searchText = ""
     @State private var isSearchActive = false
     @State private var searchResults: [PlaceResult] = []
-    @State private var isSearching = false
 
     // Selected destination & route
     @State private var selectedPlace: PlaceResult? = nil
     @State private var routePolyline: MKPolyline? = nil
     @State private var routeInfo: RouteInfo? = nil
-    @State private var isRoutingLoading = false
 
-    // Search debounce
+    // UI chrome
+    @State private var showMapStyleMenu = false
     @State private var searchTask: Task<Void, Never>? = nil
+
+    private var mapStyleMode: MapStyleMode {
+        MapStyleMode(rawValue: mapStyleModeRaw) ?? .standard
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
-            // MARK: Map
-            Map(position: $cameraPosition) {
-                UserAnnotation()
+            mapLayer
 
-                if let place = selectedPlace {
-                    Marker(place.name, coordinate: place.coordinate)
-                        .tint(.red)
-                }
-
-                if let poly = routePolyline {
-                    MapPolyline(poly)
-                        .stroke(.blue, lineWidth: 4)
-                }
+            if showMapStyleMenu {
+                Color.black.opacity(0.001)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(MapAnimation.menu) { showMapStyleMenu = false }
+                    }
             }
-            .mapStyle(.standard(elevation: .realistic))
-            .mapControls { }
-            .ignoresSafeArea()
 
-            // MARK: Top Glass Bar
             VStack(spacing: 0) {
                 topBar
-                    .padding(.top, topSafeArea)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
                 Spacer()
             }
+            .safeAreaPadding(.top)
 
-            // MARK: Bottom Route Card
             if let info = routeInfo {
                 VStack {
                     Spacer()
@@ -131,9 +176,7 @@ struct MapView: View {
             }
         }
         .onChange(of: motorcycle.presetID) { _, _ in
-            if let place = selectedPlace {
-                calculateRoute(to: place)
-            }
+            if let place = selectedPlace { calculateRoute(to: place) }
         }
         .onChange(of: motorcycle.displacementCC) { _, _ in
             guard motorcycle.isCustom, let place = selectedPlace else { return }
@@ -152,110 +195,216 @@ struct MapView: View {
                 ))
             }
         }
+        .onChange(of: colorScheme) { _, _ in
+            guard mapStyleMode == .theme else { return }
+            animateMapStyleChange()
+        }
+    }
+
+    // MARK: - Map Layer
+
+    private var mapLayer: some View {
+        Map(position: $cameraPosition) {
+            UserAnnotation()
+
+            if let place = selectedPlace {
+                Marker(place.name, coordinate: place.coordinate)
+                    .tint(.red)
+            }
+
+            if let poly = routePolyline {
+                MapPolyline(poly)
+                    .stroke(.blue, lineWidth: 4)
+            }
+        }
+        .mapStyle(mapStyleMode.style())
+        .mapControls { }
+        .opacity(mapStylePhase)
+        .scaleEffect(0.985 + mapStylePhase * 0.015)
+        .animation(MapAnimation.style, value: mapStyleModeRaw)
+        .animation(MapAnimation.style, value: colorScheme)
+        .ignoresSafeArea()
     }
 
     // MARK: - Top Bar
 
-    var topBar: some View {
-        HStack(spacing: 10) {
-            // Search field
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
-
-                if isSearchActive {
-                    TextField("Cerca città o indirizzo...", text: $searchText)
-                        .font(.system(size: 15))
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        .onChange(of: searchText) { _, val in
-                            triggerSearch(val)
-                        }
-                        .onSubmit { triggerSearch(searchText) }
-                } else {
-                    Text(selectedPlace?.name ?? "Cerca destinazione...")
-                        .font(.system(size: 15))
-                        .foregroundStyle(selectedPlace == nil ? .secondary : .primary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 0)
-
-                if isSearchActive && !searchText.isEmpty {
-                    Button {
-                        searchText = ""
-                        searchResults = []
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 14))
-            .onTapGesture {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    isSearchActive = true
-                }
-            }
-            .frame(maxWidth: isSearchActive ? .infinity : .infinity)
+    private var topBar: some View {
+        HStack(alignment: .center, spacing: 8) {
+            searchField
 
             if !isSearchActive {
-                // Re-center button
-                glassIconBtn("location.fill") {
-                    if let loc = locationManager.userLocation {
-                        withAnimation {
-                            cameraPosition = .region(MKCoordinateRegion(
-                                center: loc,
-                                latitudinalMeters: 2000,
-                                longitudinalMeters: 2000
-                            ))
+                mapToolButton(icon: "location.fill", isActive: false) {
+                    recenterMap()
+                }
+                .transition(.scale(scale: 0.82).combined(with: .opacity))
+
+                ZStack(alignment: .topTrailing) {
+                    mapToolButton(
+                        icon: "square.3.layers.3d",
+                        isActive: showMapStyleMenu
+                    ) {
+                        withAnimation(MapAnimation.menu) {
+                            showMapStyleMenu.toggle()
                         }
                     }
-                }
 
-                // Settings shortcut (no-op here, tab handles it)
-                glassIconBtn("gear") {
-                    AppManager.shared.selectedTab = 2
+                    if showMapStyleMenu {
+                        mapStyleMenu
+                            .offset(y: mapBarHeight + 8)
+                            .transition(
+                                .asymmetric(
+                                    insertion: .scale(scale: 0.88, anchor: .topTrailing)
+                                        .combined(with: .opacity)
+                                        .combined(with: .offset(y: -6)),
+                                    removal: .scale(scale: 0.94, anchor: .topTrailing)
+                                        .combined(with: .opacity)
+                                )
+                            )
+                            .zIndex(10)
+                    }
                 }
+                .transition(.scale(scale: 0.82).combined(with: .opacity))
             } else {
-                // Cancel
                 Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    withAnimation(MapAnimation.spring) {
                         isSearchActive = false
                         searchText = ""
                         searchResults = []
                     }
                 } label: {
-                    Text("Annulla")
-                        .font(.system(size: 15, weight: .medium))
+                    Text("Cancel")
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.blue)
+                        .frame(height: mapBarHeight)
                 }
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 10)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: isSearchActive)
-        .overlay(alignment: .top) {
-            // Search results dropdown
+        .animation(MapAnimation.spring, value: isSearchActive)
+        .animation(MapAnimation.menu, value: showMapStyleMenu)
+        .overlay(alignment: .topLeading) {
             if isSearchActive && !searchResults.isEmpty {
                 searchDropdown
-                    .offset(y: 56)
+                    .offset(y: mapBarHeight + 8)
             }
         }
     }
 
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            if isSearchActive {
+                TextField("Search city or address...", text: $searchText)
+                    .font(.system(size: 15))
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onChange(of: searchText) { _, val in triggerSearch(val) }
+                    .onSubmit { triggerSearch(searchText) }
+            } else {
+                Text(selectedPlace?.name ?? "Search destination...")
+                    .font(.system(size: 15))
+                    .foregroundStyle(selectedPlace == nil ? .secondary : .primary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            if isSearchActive && !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                    searchResults = []
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: mapBarHeight)
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: mapBarHeight / 2))
+        .contentShape(RoundedRectangle(cornerRadius: mapBarHeight / 2))
+        .onTapGesture {
+            withAnimation(MapAnimation.spring) { isSearchActive = true }
+        }
+    }
+
+    private func mapToolButton(icon: String, isActive: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(isActive ? .blue : .primary)
+                .frame(width: mapBarHeight, height: mapBarHeight)
+                .contentShape(Circle())
+        }
+        .glassEffect(.regular.interactive(), in: Circle())
+        .scaleEffect(isActive ? 1.04 : 1)
+        .animation(MapAnimation.spring, value: isActive)
+    }
+
+    // MARK: - Map Style Menu
+
+    private var mapStyleMenu: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Map Style")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+                .padding(.bottom, 2)
+
+            ForEach(MapStyleMode.allCases) { mode in
+                Button {
+                    selectMapStyle(mode)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: mode.icon)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(mapStyleMode == mode ? .blue : .primary)
+                            .frame(width: 22)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(mode.rawValue)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.primary)
+                            Text(mode.subtitle)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer(minLength: 8)
+
+                        if mapStyleMode == mode {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundStyle(.blue)
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(width: 248)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(.white.opacity(colorScheme == .dark ? 0.1 : 0.2), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.18), radius: 22, y: 10)
+    }
+
     // MARK: - Search Dropdown
 
-    var searchDropdown: some View {
+    private var searchDropdown: some View {
         VStack(spacing: 0) {
             ForEach(searchResults) { result in
-                Button {
-                    selectPlace(result)
-                } label: {
+                Button { selectPlace(result) } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "mappin.circle.fill")
                             .font(.system(size: 20))
@@ -285,37 +434,34 @@ struct MapView: View {
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.15), lineWidth: 0.5))
         .shadow(color: .black.opacity(0.15), radius: 20, y: 8)
-        .padding(.horizontal, 16)
         .transition(.asymmetric(
-            insertion: .opacity.combined(with: .move(edge: .top)),
+            insertion: .opacity.combined(with: .move(edge: .top)).combined(with: .scale(scale: 0.96, anchor: .top)),
             removal: .opacity.combined(with: .move(edge: .top))
         ))
     }
 
     // MARK: - Route Card
 
-    func routeCard(_ info: RouteInfo) -> some View {
+    private func routeCard(_ info: RouteInfo) -> some View {
         VStack(spacing: 0) {
-            // Drag handle
             RoundedRectangle(cornerRadius: 2.5)
                 .fill(.secondary.opacity(0.4))
                 .frame(width: 36, height: 5)
                 .padding(.top, 10)
                 .padding(.bottom, 14)
 
-            // Destination name
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(info.placeName)
                         .font(.system(size: 17, weight: .semibold))
                         .lineLimit(1)
-                    Text("Percorso per \(motorcycle.displayName)")
+                    Text("Route for \(motorcycle.displayName)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button {
-                    withAnimation(.spring(response: 0.3)) {
+                    withAnimation(MapAnimation.spring) {
                         selectedPlace = nil
                         routeInfo = nil
                         routePolyline = nil
@@ -328,25 +474,23 @@ struct MapView: View {
             }
             .padding(.horizontal, 20)
 
-            // Stats row
             HStack(spacing: 0) {
-                statCell(icon: "arrow.triangle.swap", value: info.distanceString, label: "Distanza", color: .blue)
+                statCell(icon: "arrow.triangle.swap", value: info.distanceString, label: "Distance", color: .blue)
                 Divider().frame(height: 44)
-                statCell(icon: "clock", value: info.timeString, label: "Tempo", color: .orange)
+                statCell(icon: "clock", value: info.timeString, label: "Time", color: .orange)
                 Divider().frame(height: 44)
-                statCell(icon: "fuelpump", value: info.fuelString, label: "Carburante", color: .green)
+                statCell(icon: "fuelpump", value: info.fuelString, label: "Fuel", color: .green)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 14)
 
-            // Start button
             Button {
                 // Future: launch turn-by-turn
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
                         .font(.system(size: 18))
-                    Text("Avvia navigazione")
+                    Text("Start Navigation")
                         .font(.system(size: 16, weight: .semibold))
                 }
                 .foregroundStyle(.white)
@@ -363,15 +507,13 @@ struct MapView: View {
                 .stroke(.white.opacity(0.12), lineWidth: 0.5)
         )
         .shadow(color: .black.opacity(0.18), radius: 24, y: -4)
-        .padding(.horizontal, 0)
         .transition(.asymmetric(
-            insertion: .move(edge: .bottom).combined(with: .opacity),
+            insertion: .move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.98, anchor: .bottom)),
             removal: .move(edge: .bottom).combined(with: .opacity)
         ))
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: routeInfo != nil)
     }
 
-    func statCell(icon: String, value: String, label: String, color: Color) -> some View {
+    private func statCell(icon: String, value: String, label: String, color: Color) -> some View {
         VStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.system(size: 18))
@@ -385,35 +527,57 @@ struct MapView: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Glass Icon Button
+    // MARK: - Map Style Logic
 
-    func glassIconBtn(_ icon: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(.primary)
-                .frame(width: 44, height: 44)
+    private func selectMapStyle(_ mode: MapStyleMode) {
+        guard mode.rawValue != mapStyleModeRaw else {
+            withAnimation(MapAnimation.menu) { showMapStyleMenu = false }
+            return
         }
-        .glassEffect(.regular.interactive(), in: Circle())
+        withAnimation(MapAnimation.menu) { showMapStyleMenu = false }
+        mapStyleModeRaw = mode.rawValue
+        animateMapStyleChange()
+    }
+
+    private func animateMapStyleChange() {
+        withAnimation(.easeOut(duration: 0.18)) {
+            mapStylePhase = 0.88
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            withAnimation(MapAnimation.style) {
+                mapStylePhase = 1
+            }
+        }
+    }
+
+    private func recenterMap() {
+        guard let loc = locationManager.userLocation else { return }
+        withAnimation(MapAnimation.spring) {
+            cameraPosition = .region(MKCoordinateRegion(
+                center: loc,
+                latitudinalMeters: 2000,
+                longitudinalMeters: 2000
+            ))
+        }
     }
 
     // MARK: - Search Logic
 
-    func triggerSearch(_ query: String) {
+    private func triggerSearch(_ query: String) {
         searchTask?.cancel()
         guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
             searchResults = []
             return
         }
         searchTask = Task {
-            try? await Task.sleep(nanoseconds: 350_000_000) // 350ms debounce
+            try? await Task.sleep(nanoseconds: 350_000_000)
             guard !Task.isCancelled else { return }
             await performSearch(query)
         }
     }
 
     @MainActor
-    func performSearch(_ query: String) async {
+    private func performSearch(_ query: String) async {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
         if let loc = locationManager.userLocation {
@@ -426,57 +590,51 @@ struct MapView: View {
 
         let search = MKLocalSearch(request: request)
         if let response = try? await search.start() {
-            searchResults = response.mapItems.prefix(5).map { item in
-                PlaceResult(
-                    name: item.name ?? "Luogo",
-                    subtitle: [item.placemark.locality, item.placemark.administrativeArea]
-                        .compactMap { $0 }.joined(separator: ", "),
-                    coordinate: item.placemark.coordinate
-                )
+            withAnimation(MapAnimation.spring) {
+                searchResults = response.mapItems.prefix(5).map { item in
+                    PlaceResult(
+                        name: item.name ?? "Place",
+                        subtitle: [item.placemark.locality, item.placemark.administrativeArea]
+                            .compactMap { $0 }.joined(separator: ", "),
+                        coordinate: item.placemark.coordinate
+                    )
+                }
             }
         }
     }
 
-    func selectPlace(_ place: PlaceResult) {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+    private func selectPlace(_ place: PlaceResult) {
+        withAnimation(MapAnimation.spring) {
             isSearchActive = false
             searchText = ""
             searchResults = []
             selectedPlace = place
         }
 
-        // Focus map on destination
         cameraPosition = .region(MKCoordinateRegion(
             center: place.coordinate,
             latitudinalMeters: 6000,
             longitudinalMeters: 6000
         ))
 
-        // Calculate route
         calculateRoute(to: place)
     }
 
-    func calculateRoute(to place: PlaceResult) {
-        isRoutingLoading = true
-
+    private func calculateRoute(to place: PlaceResult) {
         let destination = MKPlacemark(coordinate: place.coordinate)
         let request = MKDirections.Request()
         request.destination = MKMapItem(placemark: destination)
         request.transportType = .automobile
-        // Exclude highways (tollways) — approximate for 125cc
         request.requestsAlternateRoutes = false
 
         if let loc = locationManager.userLocation {
-            let origin = MKPlacemark(coordinate: loc)
-            request.source = MKMapItem(placemark: origin)
+            request.source = MKMapItem(placemark: MKPlacemark(coordinate: loc))
         } else {
             request.source = MKMapItem.forCurrentLocation()
         }
 
-        let directions = MKDirections(request: request)
-        directions.calculate { response, error in
+        MKDirections(request: request).calculate { response, _ in
             DispatchQueue.main.async {
-                self.isRoutingLoading = false
                 guard let route = response?.routes.first else { return }
 
                 self.routePolyline = route.polyline
@@ -486,7 +644,7 @@ struct MapView: View {
                 let mins = self.motorcycle.travelMinutes(baseAutomobileMinutes: baseMins)
                 let fuel = self.motorcycle.fuelLiters(forDistanceKm: distKm)
 
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                withAnimation(MapAnimation.spring) {
                     self.routeInfo = RouteInfo(
                         placeName: place.name,
                         distanceKm: distKm,
@@ -495,17 +653,10 @@ struct MapView: View {
                     )
                 }
 
-                // Fit camera to route
-                self.cameraPosition = .rect(route.polyline.boundingMapRect.insetBy(dx: -5000, dy: -5000))
+                withAnimation(MapAnimation.spring) {
+                    self.cameraPosition = .rect(route.polyline.boundingMapRect.insetBy(dx: -5000, dy: -5000))
+                }
             }
         }
-    }
-
-    // MARK: - Safe Area helper
-
-    var topSafeArea: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?.windows.first?.safeAreaInsets.top ?? 44
     }
 }
