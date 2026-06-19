@@ -83,7 +83,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
 
 // MARK: - Models
 
-struct RouteInfo {
+struct RouteInfo: Equatable {
     let placeName: String
     let distanceKm: Double
     let travelMinutes: Int
