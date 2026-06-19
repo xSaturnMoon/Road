@@ -148,7 +148,34 @@ struct MapView: View {
     var body: some View {
         ZStack(alignment: .top) {
             mapLayer
+            overlayContent
+        }
+        .onAppear {
+            locationManager.requestLocation()
+            centerOnUserIfNeeded(force: true)
+        }
+        .onChange(of: motorcycle.presetID) { _, _ in
+            if let place = selectedPlace { calculateRoute(to: place) }
+        }
+        .onChange(of: motorcycle.displacementCC) { _, _ in
+            guard motorcycle.isCustom, let place = selectedPlace else { return }
+            calculateRoute(to: place)
+        }
+        .onChange(of: motorcycle.stroke) { _, _ in
+            guard motorcycle.isCustom, let place = selectedPlace else { return }
+            calculateRoute(to: place)
+        }
+        .onChange(of: routeInfo) { _, newValue in
+            appManager.isRouteActive = newValue != nil
+        }
+        .onChange(of: colorScheme) { _, _ in
+            guard mapStyleMode == .theme else { return }
+            animateMapStyleChange()
+        }
+    }
 
+    private var overlayContent: some View {
+        Group {
             if showMapStyleMenu {
                 Color.black.opacity(0.001)
                     .ignoresSafeArea()
@@ -188,28 +215,6 @@ struct MapView: View {
                 .ignoresSafeArea(edges: .bottom)
             }
         }
-        .onAppear {
-            locationManager.requestLocation()
-            centerOnUserIfNeeded(force: true)
-        }
-        .onChange(of: motorcycle.presetID) { _, _ in
-            if let place = selectedPlace { calculateRoute(to: place) }
-        }
-        .onChange(of: motorcycle.displacementCC) { _, _ in
-            guard motorcycle.isCustom, let place = selectedPlace else { return }
-            calculateRoute(to: place)
-        }
-        .onChange(of: motorcycle.stroke) { _, _ in
-            guard motorcycle.isCustom, let place = selectedPlace else { return }
-            calculateRoute(to: place)
-        }
-        .onChange(of: routeInfo) { _, newValue in
-            appManager.isRouteActive = newValue != nil
-        }
-        .onChange(of: colorScheme) { _, _ in
-            guard mapStyleMode == .theme else { return }
-            animateMapStyleChange()
-        }
     }
 
     // MARK: - Map Layer
@@ -234,10 +239,8 @@ struct MapView: View {
         }
         .mapStyle(mapStyleMode.style(showsTraffic: true))
         .mapControls { }
-        .onMapCameraChange(frequency: .onEnd) { context in
-            if context.reason == .gesture {
-                userControlsCamera = true
-            }
+        .onMapCameraChange(frequency: .onEnd) {
+            userControlsCamera = true
         }
         .opacity(mapStylePhase)
         .animation(MapAnimation.style, value: mapStyleModeRaw)
@@ -631,11 +634,12 @@ struct MapView: View {
         let search = MKLocalSearch(request: request)
         if let response = try? await search.start() {
             searchResults = response.mapItems.prefix(5).map { item in
+                let location = item.placemark.location ?? CLLocation(latitude: item.placemark.coordinate.latitude, longitude: item.placemark.coordinate.longitude)
                 PlaceResult(
                     name: item.name ?? "Place",
                     subtitle: [item.placemark.locality, item.placemark.administrativeArea]
                         .compactMap { $0 }.joined(separator: ", "),
-                    coordinate: item.placemark.coordinate
+                    coordinate: location.coordinate
                 )
             }
         }
@@ -663,11 +667,17 @@ struct MapView: View {
     }
 
     private func calculateRoute(to place: PlaceResult) {
-        let destination = MKMapItem(placemark: MKPlacemark(coordinate: place.coordinate))
+        let destination = MKMapItem(
+            location: CLLocation(latitude: place.coordinate.latitude, longitude: place.coordinate.longitude),
+            address: nil
+        )
 
         let source: MKMapItem
         if let loc = locationManager.userLocation {
-            source = MKMapItem(placemark: MKPlacemark(coordinate: loc))
+            source = MKMapItem(
+                location: CLLocation(latitude: loc.latitude, longitude: loc.longitude),
+                address: nil
+            )
         } else {
             source = MKMapItem.forCurrentLocation()
         }
