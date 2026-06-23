@@ -48,9 +48,8 @@ private enum MapAnimation {
 }
 
 private let mapBarHeight: CGFloat = 44
-private let routeHaloStroke = StrokeStyle(lineWidth: 16, lineCap: .round, lineJoin: .round)
-private let routeGlowStroke = StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round)
-private let routeCoreStroke = StrokeStyle(lineWidth: 4.5, lineCap: .round, lineJoin: .round)
+private let routeOutlineStroke = StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round)
+private let routeFillStroke   = StrokeStyle(lineWidth: 6,  lineCap: .round, lineJoin: .round)
 
 // MARK: - Location Manager
 
@@ -75,7 +74,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         manager.activityType = .automotiveNavigation
         manager.distanceFilter = 5
-        manager.headingFilter = 2
+        manager.headingFilter = 1
         manager.requestWhenInUseAuthorization()
     }
 
@@ -284,7 +283,7 @@ struct MapView: View {
             }
             .onChange(of: locationManager.deviceHeading) { _, _ in
                 guard appManager.isNavigating, let location = locationManager.currentLocation else { return }
-                followUserDuringNavigation(at: location, animated: true, animation: MapAnimation.heading)
+                followUserDuringNavigation(at: location)
             }
             .onChange(of: colorScheme) { _, _ in
                 guard mapStyleMode == .theme else { return }
@@ -462,13 +461,10 @@ struct MapView: View {
         }
 
         ForEach(trafficSegments) { segment in
-            let color = segment.level.color
             MapPolyline(coordinates: segment.coordinates)
-                .stroke(segment.level.haloColor, style: routeHaloStroke)
+                .stroke(.white, style: routeOutlineStroke)
             MapPolyline(coordinates: segment.coordinates)
-                .stroke(segment.level.glowColor, style: routeGlowStroke)
-            MapPolyline(coordinates: segment.coordinates)
-                .stroke(color, style: routeCoreStroke)
+                .stroke(segment.level.color, style: routeFillStroke)
         }
     }
 
@@ -961,7 +957,7 @@ struct MapView: View {
     }
 
     private func syncRouteActiveState() {
-        appManager.isRouteActive = false
+        appManager.isRouteActive = routeInfo != nil && !appManager.isNavigating
     }
 
     private func startNavigation() {
@@ -997,7 +993,7 @@ struct MapView: View {
         speedCameraService.reset()
     }
 
-    private func followUserDuringNavigation(at location: CLLocation, animated: Bool = false, animation: Animation = MapAnimation.navigation) {
+    private func followUserDuringNavigation(at location: CLLocation, animated: Bool = false) {
         guard !userControlsCamera else { return }
 
         let heading = resolvedNavigationHeading(for: location)
@@ -1017,7 +1013,7 @@ struct MapView: View {
         )
 
         if animated {
-            setCamera(.camera(camera), animation: animation, duration: animation == MapAnimation.heading ? 0.18 : 0.95)
+            setCamera(.camera(camera), animation: MapAnimation.navigation, duration: 0.95)
         } else {
             isProgrammaticCameraMove = true
             cameraPosition = .camera(camera)
