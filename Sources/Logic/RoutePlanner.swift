@@ -57,13 +57,19 @@ enum TrafficLevel: Equatable {
 }
 
 enum RoutePlanner {
-    private static let forbiddenTokens = [
-        "autostrada", "tangenziale", "motorway", "highway",
-        "ra ", " ss ", " superstrada", " pedaggio", " toll ",
-        " a1", " a4", " a7", " a8", " a9", " a10", " a11", " a12",
-        " a13", " a14", " a15", " a16", " a21", " a22", " a23", " a24",
-        " a25", " a26", " a27", " a28", " a29", " a30", " a31", " a32"
+    private static let forbiddenSubstrings = [
+        "autostrada", "autostrade", "tangenziale", "tangenz ", "motorway", "highway",
+        "superstrada", " pedaggio", " pedaggi", " toll ", " casello ", " caselli ",
+        "raccordo anulare", "raccordo autostradale", "raccordo ", "gra ", "g.r.a",
+        "grande raccordo", " variante autostradale", " dir. autostrada",
+        " uscita autostrada", " entrata autostrada", " bretella autostradale",
+        " ssray", " diramazione autostradale", " aut ", " mi aut", " sv "
     ]
+
+    private static let forbiddenHighwayPattern = try! NSRegularExpression(
+        pattern: #"(?<![a-z0-9])(?:a\s?(?:1|4|5|6|7|8|9|10|11|12|13|14|15|16|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|35|50|51|52|55|56|57|91)|e\s?(?:35|45|55|70|80|90|612|45))(?![a-z0-9])"#,
+        options: [.caseInsensitive]
+    )
 
     static func configure125ccRequest(from source: MKMapItem, to destination: MKMapItem) -> MKDirections.Request {
         let request = MKDirections.Request()
@@ -76,9 +82,11 @@ enum RoutePlanner {
         return request
     }
 
+    /// Returns only a route that avoids autostrada and tangenziale. Never falls back to illegal roads.
     static func best125ccRoute(from routes: [MKRoute]) -> MKRoute? {
-        let legal = routes.filter { !usesForbiddenRoads($0) }
-        return legal.min(by: { $0.expectedTravelTime < $1.expectedTravelTime }) ?? routes.first
+        routes
+            .filter { !usesForbiddenRoads($0) }
+            .min(by: { $0.expectedTravelTime < $1.expectedTravelTime })
     }
 
     static func usesForbiddenRoads(_ route: MKRoute) -> Bool {
@@ -87,7 +95,17 @@ enum RoutePlanner {
 
     static func stepUsesForbiddenRoad(_ step: MKRoute.Step) -> Bool {
         let text = step.instructions.lowercased()
-        return forbiddenTokens.contains(where: { text.contains($0) })
+
+        if forbiddenSubstrings.contains(where: { text.contains($0) }) {
+            return true
+        }
+
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        if forbiddenHighwayPattern.firstMatch(in: text, options: [], range: range) != nil {
+            return true
+        }
+
+        return false
     }
 
     static func trafficSegments(for route: MKRoute) -> [TrafficSegment] {
@@ -104,7 +122,12 @@ enum RoutePlanner {
             let refined = subdivide(coords, level: level)
 
             if let previous = segments.last?.level, previous != level, refined.count >= 2 {
-                let blend = blendSegment(between: segments.last!.coordinates.last!, and: refined[0].coordinates.first!, from: previous, to: level)
+                let blend = blendSegment(
+                    between: segments.last!.coordinates.last!,
+                    and: refined[0].coordinates.first!,
+                    from: previous,
+                    to: level
+                )
                 segments.append(blend)
             }
 
@@ -145,8 +168,7 @@ enum RoutePlanner {
             latitude: (start.latitude + end.latitude) / 2,
             longitude: (start.longitude + end.longitude) / 2
         )
-        let blendLevel: TrafficLevel = (from == .heavy || to == .heavy) ? .moderate : .moderate
-        return TrafficSegment(coordinates: [start, mid, end], level: blendLevel)
+        return TrafficSegment(coordinates: [start, mid, end], level: .moderate)
     }
 
     static func mergedPolyline(from route: MKRoute) -> MKPolyline {

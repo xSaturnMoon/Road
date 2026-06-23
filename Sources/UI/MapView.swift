@@ -59,6 +59,14 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     @Published var userLocation: CLLocationCoordinate2D?
     @Published var currentLocation: CLLocation?
     @Published var authStatus: CLAuthorizationStatus = .notDetermined
+    @Published private(set) var displaySpeedKmh: Int = 0
+    @Published private(set) var deviceHeading: CLLocationDirection = 0
+
+    private var previousSample: (location: CLLocation, date: Date)?
+    private var filteredSpeedMs: Double = 0
+
+    /// Speeds below this threshold (m/s) are treated as stationary (~2.5 km/h).
+    private let stationarySpeedMs: Double = 0.69
 
     override init() {
         super.init()
@@ -66,6 +74,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         manager.activityType = .automotiveNavigation
         manager.distanceFilter = 5
+        manager.headingFilter = 5
         manager.requestWhenInUseAuthorization()
     }
 
@@ -75,14 +84,32 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
 
     func startNavigationTracking() {
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        manager.distanceFilter = 3
+        manager.distanceFilter = 2
         manager.startUpdatingLocation()
+        if CLLocationManager.headingAvailable() {
+            manager.startUpdatingHeading()
+        }
+    }
+
+    func stopNavigationTracking() {
+        if CLLocationManager.headingAvailable() {
+            manager.stopUpdatingHeading()
+        }
+        manager.distanceFilter = 5
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let location = locations.last else { return }
         currentLocation = location
         userLocation = location.coordinate
+        updateDisplaySpeed(from: location)
+    }
+
+    func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        guard newHeading.headingAccuracy >= 0, newHeading.headingAccuracy <= 30 else { return }
+        let heading = newHeading.trueHeading >= 0 ? newHeading.trueHeading : newHeading.magneticHeading
+        guard heading >= 0 else { return }
+        deviceHeading = heading
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -91,6 +118,48 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
            manager.authorizationStatus == .authorizedAlways {
             manager.startUpdatingLocation()
         }
+    }
+
+    private func updateDisplaySpeed(from location: CLLocation) {
+        let accuracy = location.horizontalAccuracy
+        guard accuracy >= 0, accuracy <= 35 else {
+            applyStationarySpeed()
+            return
+        }
+
+        var speedMs: Double = 0
+
+        if location.speed >= 0 {
+            speedMs = Double(location.speed)
+        }
+
+        if let previous = previousSample {
+            let elapsed = location.timestamp.timeIntervalSince(previous.date)
+            if elapsed >= 0.35, elapsed <= 4 {
+                let distance = location.distance(from: previous.location)
+                let derivedMs = distance / elapsed
+
+                if location.speed < 0 {
+                    speedMs = derivedMs
+                } else if abs(derivedMs - speedMs) <= 4 {
+                    speedMs = (speedMs * 0.45) + (derivedMs * 0.55)
+                }
+            }
+        }
+
+        previousSample = (location, location.timestamp)
+        filteredSpeedMs = (filteredSpeedMs * 0.65) + (speedMs * 0.35)
+
+        if filteredSpeedMs < stationarySpeedMs {
+            applyStationarySpeed()
+        } else {
+            displaySpeedKmh = Int((filteredSpeedMs * 3.6).rounded())
+        }
+    }
+
+    private func applyStationarySpeed() {
+        filteredSpeedMs = 0
+        displaySpeedKmh = 0
     }
 }
 
@@ -149,6 +218,7 @@ struct MapView: View {
     @State private var activeRoute: MKRoute?
     @State private var isProgrammaticCameraMove = false
     @State private var navigationHeading: CLLocationDirection = 0
+    @State private var isNavigation3D = true
 
     @State private var searchText = ""
     @State private var isSearchActive = false
@@ -194,11 +264,11 @@ struct MapView: View {
                 guard motorcycle.isCustom, let place = selectedPlace else { return }
                 calculateRoute(to: place)
             }
-            .onChange(of: routeInfo) { _, newValue in
-                syncRouteActiveState(routeVisible: newValue != nil)
+            .onChange(of: routeInfo) { _, _ in
+                syncRouteActiveState()
             }
             .onChange(of: appManager.isNavigating) { _, _ in
-                syncRouteActiveState(routeVisible: routeInfo != nil)
+                syncRouteActiveState()
             }
             .onChange(of: locationManager.currentLocation) { _, location in
                 guard appManager.isNavigating, let location else { return }
@@ -350,13 +420,39 @@ struct MapView: View {
             .animation(MapAnimation.spring, value: appManager.isNavigating)
 
             if appManager.isNavigating {
-                HStack(spacing: 10) {
-                    speedLimitSignButton
-                    currentSpeedButton
+                HStack(alignment: .top, spacing: 0) {
+                    VStack(spacing: 10) {
+                        speedLimitSignButton
+                        currentSpeedButton
+                    }
+
+                    Spacer(minLength: 0)
+
+                    perspectiveToggleButton
                 }
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+    }
+
+    private var perspectiveToggleButton: some View {
+        Button {
+            withAnimation(.smooth(duration: 0.38)) {
+                isNavigation3D.toggle()
+            }
+            userControlsCamera = false
+            if let location = locationManager.currentLocation {
+                followUserDuringNavigation(at: location, animated: true)
+            }
+        } label: {
+            Text(isNavigation3D ? "3D" : "2D")
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+                .contentTransition(.numericText())
+                .frame(width: mapBarHeight, height: mapBarHeight)
+                .glassEffect(.regular.interactive(), in: Circle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var exitNavigationButton: some View {
@@ -370,9 +466,9 @@ struct MapView: View {
             }
             .foregroundStyle(.primary)
             .padding(.horizontal, 14)
-            .frame(height: mapBarHeight)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: mapBarHeight, maxHeight: mapBarHeight)
             .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: mapBarHeight / 2))
+            .contentShape(RoundedRectangle(cornerRadius: mapBarHeight / 2))
         }
         .buttonStyle(.plain)
     }
@@ -392,10 +488,12 @@ struct MapView: View {
     }
 
     private var currentSpeedButton: some View {
-        Text(currentSpeedDisplay)
+        Text("\(locationManager.displaySpeedKmh)")
             .font(.system(size: 16, weight: .bold, design: .rounded))
             .monospacedDigit()
             .foregroundStyle(.primary)
+            .contentTransition(.numericText())
+            .animation(.smooth(duration: 0.25), value: locationManager.displaySpeedKmh)
             .frame(width: mapBarHeight, height: mapBarHeight)
             .glassEffect(.regular.interactive(), in: Circle())
     }
@@ -457,16 +555,6 @@ struct MapView: View {
             return "\(limit)"
         }
         return "—"
-    }
-
-    private var currentSpeedDisplay: String {
-        guard let location = locationManager.currentLocation,
-              location.speed >= 0,
-              location.horizontalAccuracy >= 0,
-              location.horizontalAccuracy <= 25 else {
-            return "0"
-        }
-        return "\(Int((location.speed * 3.6).rounded()))"
     }
 
     private func mapToolButton(icon: String, isActive: Bool, action: @escaping () -> Void) -> some View {
@@ -662,7 +750,7 @@ struct MapView: View {
         .shadow(color: .black.opacity(0.14), radius: 28, y: -6)
         .padding(.horizontal, 12)
         .transition(.move(edge: .bottom).combined(with: .opacity))
-        .onAppear { syncRouteActiveState(routeVisible: true) }
+        .onAppear { syncRouteActiveState() }
     }
 
     private func routeStatPill(icon: String, value: String, label: String, tint: Color) -> some View {
@@ -753,23 +841,25 @@ struct MapView: View {
             trafficSegments = []
             routeWarning = nil
             appManager.isNavigating = false
-            syncRouteActiveState(routeVisible: false)
+            syncRouteActiveState()
             speedLimitService.reset()
         }
     }
 
-    private func syncRouteActiveState(routeVisible: Bool) {
-        appManager.isRouteActive = routeVisible || appManager.isNavigating
+    private func syncRouteActiveState() {
+        // Tab bar hidden only during active turn-by-turn navigation.
+        appManager.isRouteActive = appManager.isNavigating
     }
 
     private func startNavigation() {
         guard routeInfo != nil else { return }
         closeMapStyleMenu()
         userControlsCamera = false
+        isNavigation3D = true
 
         withAnimation(MapAnimation.spring) {
             appManager.isNavigating = true
-            syncRouteActiveState(routeVisible: true)
+            syncRouteActiveState()
         }
 
         locationManager.startNavigationTracking()
@@ -781,9 +871,10 @@ struct MapView: View {
     }
 
     private func stopNavigation() {
+        locationManager.stopNavigationTracking()
         withAnimation(MapAnimation.spring) {
             appManager.isNavigating = false
-            syncRouteActiveState(routeVisible: routeInfo != nil)
+            syncRouteActiveState()
         }
         speedLimitService.reset()
     }
@@ -791,15 +882,20 @@ struct MapView: View {
     private func followUserDuringNavigation(at location: CLLocation, animated: Bool = false) {
         guard !userControlsCamera else { return }
 
-        if location.course >= 0 {
-            navigationHeading = location.course
-        }
+        let heading = resolvedNavigationHeading(for: location)
+        let pitch = isNavigation3D ? 62.0 : 0.0
+        let distance = isNavigation3D ? 260.0 : 520.0
+        let center = offsetCoordinate(
+            from: location.coordinate,
+            bearing: heading,
+            distanceMeters: isNavigation3D ? 90 : 0
+        )
 
         let camera = MapCamera(
-            centerCoordinate: location.coordinate,
-            distance: 260,
-            heading: navigationHeading,
-            pitch: 62
+            centerCoordinate: center,
+            distance: distance,
+            heading: heading,
+            pitch: pitch
         )
 
         if animated {
@@ -807,10 +903,61 @@ struct MapView: View {
         } else {
             isProgrammaticCameraMove = true
             cameraPosition = .camera(camera)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
                 isProgrammaticCameraMove = false
             }
         }
+    }
+
+    private func resolvedNavigationHeading(for location: CLLocation) -> CLLocationDirection {
+        let moving = locationManager.displaySpeedKmh >= 4
+        let target: CLLocationDirection
+
+        if moving, location.course >= 0 {
+            target = location.course
+        } else if locationManager.deviceHeading >= 0 {
+            target = locationManager.deviceHeading
+        } else if navigationHeading > 0 {
+            target = navigationHeading
+        } else {
+            target = 0
+        }
+
+        return smoothHeading(toward: target)
+    }
+
+    private func smoothHeading(toward target: CLLocationDirection) -> CLLocationDirection {
+        let delta = ((target - navigationHeading + 540).truncatingRemainder(dividingBy: 360)) - 180
+        navigationHeading = (navigationHeading + delta * 0.18 + 360).truncatingRemainder(dividingBy: 360)
+        return navigationHeading
+    }
+
+    private func offsetCoordinate(
+        from coordinate: CLLocationCoordinate2D,
+        bearing: CLLocationDirection,
+        distanceMeters: Double
+    ) -> CLLocationCoordinate2D {
+        guard distanceMeters > 0 else { return coordinate }
+
+        let earthRadius = 6_378_137.0
+        let bearingRad = bearing * .pi / 180
+        let latRad = coordinate.latitude * .pi / 180
+        let lonRad = coordinate.longitude * .pi / 180
+        let angularDistance = distanceMeters / earthRadius
+
+        let newLat = asin(
+            sin(latRad) * cos(angularDistance) +
+            cos(latRad) * sin(angularDistance) * cos(bearingRad)
+        )
+        let newLon = lonRad + atan2(
+            sin(bearingRad) * sin(angularDistance) * cos(latRad),
+            cos(angularDistance) - sin(latRad) * sin(newLat)
+        )
+
+        return CLLocationCoordinate2D(
+            latitude: newLat * 180 / .pi,
+            longitude: newLon * 180 / .pi
+        )
     }
 
     private func triggerSearch(_ query: String) {
@@ -892,16 +1039,27 @@ struct MapView: View {
 
         MKDirections(request: request).calculate { response, _ in
             DispatchQueue.main.async {
-                guard let routes = response?.routes, !routes.isEmpty else { return }
+                guard let routes = response?.routes, !routes.isEmpty else {
+                    routeWarning = "Impossibile calcolare un percorso verso la destinazione."
+                    return
+                }
 
-                let route = RoutePlanner.best125ccRoute(from: routes) ?? routes[0]
+                guard let route = RoutePlanner.best125ccRoute(from: routes) else {
+                    activeRoute = nil
+                    trafficSegments = []
+                    routeInfo = nil
+                    routeWarning = "Nessun percorso legale per 125cc trovato. Autostrada e tangenziale non sono consentite."
+                    syncRouteActiveState()
+                    return
+                }
+
                 let isFullyLegal = !RoutePlanner.usesForbiddenRoads(route)
 
                 activeRoute = route
                 trafficSegments = RoutePlanner.trafficSegments(for: route)
                 routeWarning = isFullyLegal
                     ? nil
-                    : "Nessun percorso 125cc completamente legale. Mostrata l'alternativa più vicina."
+                    : "Attenzione: verifica manualmente il percorso prima di partire."
 
                 let distKm = route.distance / 1000
                 let baseMins = Int(route.expectedTravelTime / 60)
@@ -917,7 +1075,7 @@ struct MapView: View {
                         avoidsHighways: isFullyLegal
                     )
                 }
-                syncRouteActiveState(routeVisible: true)
+                syncRouteActiveState()
 
                 if !userControlsCamera {
                     setCamera(
