@@ -38,19 +38,22 @@ jobs:
           echo "Building version: $VERSION"
 
       - name: Update update.json
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          NOTES=$(python3 -c "import json; print(json.load(open('version.json')).get('notes', ''))")
           python3 -c "
-          import json
+          import json, os
+          with open('version.json', 'r') as f:
+              version_data = json.load(f)
+          
           data = {
-            'version': '$VERSION',
-            'notes': '''$NOTES''',
+            'version': os.environ['VERSION'],
+            'notes': version_data.get('notes', ''),
             'url': 'https://github.com/xSaturnMoon/Road/releases/download/latest/Road.ipa'
           }
           with open('update.json', 'w') as f:
               json.dump(data, f, indent=2, ensure_ascii=False)
-          print('update.json updated to version', '$VERSION')
+          print('update.json updated to version', os.environ['VERSION'])
           "
 
       - name: Commit and push update.json
@@ -71,7 +74,8 @@ jobs:
       - name: Update Info.plist Version
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Sources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" Sources/Info.plist 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $VERSION" Sources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" Sources/Info.plist 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $VERSION" Sources/Info.plist
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -90,7 +94,8 @@ jobs:
             PRODUCT_BUNDLE_IDENTIFIER=com.road.app \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            ENTITLEMENTS_REQUIRED=NO
+            ENTITLEMENTS_REQUIRED=NO \
+            SWIFT_COMPILATION_MODE=singlefile
 
       - name: Package IPA
         run: |
@@ -116,6 +121,7 @@ jobs:
         uses: ncipollo/release-action@v1
         with:
           artifacts: "Road.ipa,manifest.plist"
+          failOnMissingArtifact: false
           tag: "latest"
           name: "Road v${{ steps.version.outputs.VERSION }}"
           body: |
