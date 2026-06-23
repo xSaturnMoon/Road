@@ -208,6 +208,7 @@ struct MapView: View {
     @ObservedObject private var motorcycle = MotorcycleStore.shared
     @ObservedObject private var appManager = AppManager.shared
     @ObservedObject private var speedLimitService = SpeedLimitService.shared
+    @ObservedObject private var speedCameraService = SpeedCameraService.shared
 
     @AppStorage("map_style_mode") private var mapStyleModeRaw = MapStyleMode.standard.rawValue
 
@@ -246,6 +247,8 @@ struct MapView: View {
             styleMenuOverlay
             searchResultsOverlay
             routeOverlay
+            routeWarningOverlay
+            speedCameraAlertOverlay
         }
         return view
             .onAppear {
@@ -273,6 +276,7 @@ struct MapView: View {
             .onChange(of: locationManager.currentLocation) { _, location in
                 guard appManager.isNavigating, let location else { return }
                 speedLimitService.update(for: location)
+                speedCameraService.update(for: location, heading: navigationHeading)
                 followUserDuringNavigation(at: location)
             }
             .onChange(of: colorScheme) { _, _ in
@@ -327,6 +331,86 @@ struct MapView: View {
     }
 
     @ViewBuilder
+    private var routeWarningOverlay: some View {
+        if routeInfo == nil, let routeWarning, selectedPlace != nil {
+            VStack {
+                Spacer()
+                routeErrorCard(routeWarning)
+            }
+            .ignoresSafeArea(edges: .bottom)
+        }
+    }
+
+    @ViewBuilder
+    private var speedCameraAlertOverlay: some View {
+        if appManager.isNavigating, let alert = speedCameraService.activeAlert {
+            VStack {
+                Spacer()
+                speedCameraAlertBanner(alert)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .animation(MapAnimation.spring, value: alert.distanceMeters)
+        }
+    }
+
+    private func speedCameraAlertBanner(_ alert: SpeedCameraAlert) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: alert.isImminent ? "exclamationmark.triangle.fill" : "camera.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(alert.isImminent ? .red : .orange)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(alert.camera.type.label)
+                    .font(.system(size: 15, weight: .bold))
+                Text(alertSubtitle(for: alert))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            Text("\(alert.distanceMeters) m")
+                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(alert.isImminent ? .red : .primary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(alert.isImminent ? Color.red.opacity(0.45) : Color.orange.opacity(0.25), lineWidth: 1)
+        )
+    }
+
+    private func alertSubtitle(for alert: SpeedCameraAlert) -> String {
+        if let limit = alert.camera.maxSpeedKmh {
+            return "Limite \(limit) km/h · OpenStreetMap"
+        }
+        return "Segnalazione verificata · OpenStreetMap"
+    }
+
+    private func routeErrorCard(_ message: String) -> some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 28))
+                .foregroundStyle(.orange)
+            Text(message)
+                .font(.system(size: 15, weight: .medium))
+                .multilineTextAlignment(.center)
+            Button("Chiudi") { clearRoute() }
+                .font(.system(size: 15, weight: .semibold))
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+        .padding(.horizontal, 12)
+        .padding(.bottom, 20)
+    }
+
+    @ViewBuilder
     private var routeOverlay: some View {
         if let info = routeInfo, !appManager.isNavigating {
             VStack {
@@ -361,6 +445,13 @@ struct MapView: View {
         if let place = selectedPlace {
             Marker(place.name, coordinate: place.coordinate)
                 .tint(.red)
+        }
+
+        if appManager.isNavigating {
+            ForEach(speedCameraService.camerasOnRoute) { camera in
+                Marker(camera.type.label, coordinate: camera.coordinate)
+                    .tint(camera.type == .section ? .purple : .orange)
+            }
         }
 
         ForEach(trafficSegments) { segment in
@@ -843,6 +934,7 @@ struct MapView: View {
             appManager.isNavigating = false
             syncRouteActiveState()
             speedLimitService.reset()
+            speedCameraService.reset()
         }
     }
 
@@ -864,6 +956,10 @@ struct MapView: View {
 
         locationManager.startNavigationTracking()
 
+        if let route = activeRoute {
+            speedCameraService.loadCameras(along: route)
+        }
+
         if let location = locationManager.currentLocation {
             speedLimitService.update(for: location)
             followUserDuringNavigation(at: location, animated: true)
@@ -877,6 +973,7 @@ struct MapView: View {
             syncRouteActiveState()
         }
         speedLimitService.reset()
+        speedCameraService.reset()
     }
 
     private func followUserDuringNavigation(at location: CLLocation, animated: Bool = false) {
@@ -1040,26 +1137,25 @@ struct MapView: View {
         MKDirections(request: request).calculate { response, _ in
             DispatchQueue.main.async {
                 guard let routes = response?.routes, !routes.isEmpty else {
+                    routeInfo = nil
                     routeWarning = "Impossibile calcolare un percorso verso la destinazione."
                     return
                 }
 
-                guard let route = RoutePlanner.best125ccRoute(from: routes) else {
-                    activeRoute = nil
-                    trafficSegments = []
+                guard let selection = RoutePlanner.select125ccRoute(from: routes) else {
                     routeInfo = nil
-                    routeWarning = "Nessun percorso legale per 125cc trovato. Autostrada e tangenziale non sono consentite."
-                    syncRouteActiveState()
+                    routeWarning = "Impossibile calcolare un percorso verso la destinazione."
                     return
                 }
 
-                let isFullyLegal = !RoutePlanner.usesForbiddenRoads(route)
+                let route = selection.route
+                let isFullyLegal = selection.isFullyLegal
 
                 activeRoute = route
                 trafficSegments = RoutePlanner.trafficSegments(for: route)
                 routeWarning = isFullyLegal
                     ? nil
-                    : "Attenzione: verifica manualmente il percorso prima di partire."
+                    : "Attenzione: il percorso potrebbe includere tratti non consentiti a 125cc. Verifica prima di partire."
 
                 let distKm = route.distance / 1000
                 let baseMins = Int(route.expectedTravelTime / 60)

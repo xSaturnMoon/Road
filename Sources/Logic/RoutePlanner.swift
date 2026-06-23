@@ -57,19 +57,30 @@ enum TrafficLevel: Equatable {
 }
 
 enum RoutePlanner {
-    private static let forbiddenSubstrings = [
-        "autostrada", "autostrade", "tangenziale", "tangenz ", "motorway", "highway",
-        "superstrada", " pedaggio", " pedaggi", " toll ", " casello ", " caselli ",
-        "raccordo anulare", "raccordo autostradale", "raccordo ", "gra ", "g.r.a",
-        "grande raccordo", " variante autostradale", " dir. autostrada",
-        " uscita autostrada", " entrata autostrada", " bretella autostradale",
-        " ssray", " diramazione autostradale", " aut ", " mi aut", " sv "
+    private static let strongForbiddenPhrases = [
+        "autostrada", "autostrade", "in autostrada", "sull'autostrada", "sull'autostrade",
+        "tangenziale est", "tangenziale ovest", "tangenziale nord", "tangenziale sud",
+        "tangenziale interna", "tangenziale esterna", " sulla tangenziale", " in tangenziale",
+        "raccordo anulare", "grande raccordo anulare", "g.r.a.", " g.r.a ",
+        "casello autostradale", " casello ", " pedaggio", " pedaggi ", "stazione di pedaggio",
+        "superstrada a pedaggio", "immettersi in autostrada", "prendere l'autostrada",
+        "entrare in autostrada", "diramazione autostradale", "bretella autostradale",
+        "viadotto autostradale", " tratto autostradale"
     ]
 
-    private static let forbiddenHighwayPattern = try! NSRegularExpression(
-        pattern: #"(?<![a-z0-9])(?:a\s?(?:1|4|5|6|7|8|9|10|11|12|13|14|15|16|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|35|50|51|52|55|56|57|91)|e\s?(?:35|45|55|70|80|90|612|45))(?![a-z0-9])"#,
-        options: [.caseInsensitive]
-    )
+    private static let highwayInstructionPatterns = [
+        #"prendere\s+(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
+        #"immettersi\s+(?:su\s+)?(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
+        #"continuare\s+(?:su\s+)?(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
+        #"autostrada\s+a\s*\d{1,2}\b"#,
+        #"tangenziale\s+(?:di\s+)?(?:roma|milano|torino|napoli|bologna|firenze|genova|palermo)"#
+    ]
+
+    struct RouteSelection {
+        let route: MKRoute
+        let isFullyLegal: Bool
+        let forbiddenStepCount: Int
+    }
 
     static func configure125ccRequest(from source: MKMapItem, to destination: MKMapItem) -> MKDirections.Request {
         let request = MKDirections.Request()
@@ -82,11 +93,27 @@ enum RoutePlanner {
         return request
     }
 
-    /// Returns only a route that avoids autostrada and tangenziale. Never falls back to illegal roads.
+    /// Prefers fully legal 125cc routes. Falls back to the least-restricted MapKit alternative
+    /// (highways already avoided) so the user always gets a navigable preview.
+    static func select125ccRoute(from routes: [MKRoute]) -> RouteSelection? {
+        guard !routes.isEmpty else { return nil }
+
+        let ranked = routes.map { route -> RouteSelection in
+            let forbiddenCount = route.steps.filter(stepUsesForbiddenRoad).count
+            return RouteSelection(route: route, isFullyLegal: forbiddenCount == 0, forbiddenStepCount: forbiddenCount)
+        }
+        .sorted { lhs, rhs in
+            if lhs.forbiddenStepCount != rhs.forbiddenStepCount {
+                return lhs.forbiddenStepCount < rhs.forbiddenStepCount
+            }
+            return lhs.route.expectedTravelTime < rhs.route.expectedTravelTime
+        }
+
+        return ranked.first
+    }
+
     static func best125ccRoute(from routes: [MKRoute]) -> MKRoute? {
-        routes
-            .filter { !usesForbiddenRoads($0) }
-            .min(by: { $0.expectedTravelTime < $1.expectedTravelTime })
+        select125ccRoute(from: routes)?.route
     }
 
     static func usesForbiddenRoads(_ route: MKRoute) -> Bool {
@@ -96,13 +123,14 @@ enum RoutePlanner {
     static func stepUsesForbiddenRoad(_ step: MKRoute.Step) -> Bool {
         let text = step.instructions.lowercased()
 
-        if forbiddenSubstrings.contains(where: { text.contains($0) }) {
+        if strongForbiddenPhrases.contains(where: { text.contains($0) }) {
             return true
         }
 
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        if forbiddenHighwayPattern.firstMatch(in: text, options: [], range: range) != nil {
-            return true
+        for pattern in highwayInstructionPatterns {
+            if text.range(of: pattern, options: .regularExpression) != nil {
+                return true
+            }
         }
 
         return false
