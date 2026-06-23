@@ -58,6 +58,7 @@ enum TrafficLevel: Equatable {
 
 enum RoutePlanner {
     private static let strongForbiddenPhrases = [
+        // — Italiano —
         "autostrada", "autostrade", "in autostrada", "sull'autostrada", "sull'autostrade",
         "tangenziale est", "tangenziale ovest", "tangenziale nord", "tangenziale sud",
         "tangenziale interna", "tangenziale esterna", " sulla tangenziale", " in tangenziale",
@@ -65,7 +66,12 @@ enum RoutePlanner {
         "casello autostradale", " casello ", " pedaggio", " pedaggi ", "stazione di pedaggio",
         "superstrada a pedaggio", "immettersi in autostrada", "prendere l'autostrada",
         "entrare in autostrada", "diramazione autostradale", "bretella autostradale",
-        "viadotto autostradale", " tratto autostradale"
+        "viadotto autostradale", " tratto autostradale",
+        // — English (MKDirections may return English instructions) —
+        "motorway", "highway", "freeway", "expressway",
+        "take the toll", "toll road", "toll booth", "toll plaza",
+        "join the motorway", "take motorway", "merge onto the highway",
+        "take the freeway", "enter the motorway", "ring road"
     ]
 
     private static let highwayInstructionPatterns = [
