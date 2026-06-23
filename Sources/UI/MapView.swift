@@ -43,11 +43,13 @@ private enum MapAnimation {
     static let spring = Animation.spring(response: 0.4, dampingFraction: 0.88)
     static let style = Animation.smooth(duration: 0.55)
     static let menu = Animation.smooth(duration: 0.32)
+    static let navigation = Animation.smooth(duration: 0.95)
 }
 
 private let mapBarHeight: CGFloat = 44
-private let softStroke = StrokeStyle(lineWidth: 12, lineCap: .round, lineJoin: .round)
-private let coreStroke = StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round)
+private let routeHaloStroke = StrokeStyle(lineWidth: 16, lineCap: .round, lineJoin: .round)
+private let routeGlowStroke = StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round)
+private let routeCoreStroke = StrokeStyle(lineWidth: 4.5, lineCap: .round, lineJoin: .round)
 
 // MARK: - Location Manager
 
@@ -145,6 +147,8 @@ struct MapView: View {
     @State private var userControlsCamera = false
     @State private var didInitialCenter = false
     @State private var activeRoute: MKRoute?
+    @State private var isProgrammaticCameraMove = false
+    @State private var navigationHeading: CLLocationDirection = 0
 
     @State private var searchText = ""
     @State private var isSearchActive = false
@@ -205,6 +209,8 @@ struct MapView: View {
                 guard mapStyleMode == .theme else { return }
                 animateMapStyleChange()
             }
+            .toolbar(appManager.isRouteActive ? .hidden : .visible, for: .tabBar)
+            .toolbarVisibility(appManager.isRouteActive ? .hidden : .visible, for: .tabBar)
     }
 
     // MARK: - Layers
@@ -268,7 +274,9 @@ struct MapView: View {
         .mapStyle(mapStyleMode.style(showsTraffic: true))
         .mapControls { }
         .onMapCameraChange(frequency: .onEnd) { _ in
-            userControlsCamera = true
+            if !isProgrammaticCameraMove {
+                userControlsCamera = true
+            }
         }
         .opacity(mapStylePhase)
         .animation(MapAnimation.style, value: mapStyleModeRaw)
@@ -288,32 +296,25 @@ struct MapView: View {
         ForEach(trafficSegments) { segment in
             let color = segment.level.color
             MapPolyline(coordinates: segment.coordinates)
-                .stroke(color.opacity(0.35), style: softStroke)
+                .stroke(segment.level.haloColor, style: routeHaloStroke)
             MapPolyline(coordinates: segment.coordinates)
-                .stroke(color, style: coreStroke)
+                .stroke(segment.level.glowColor, style: routeGlowStroke)
+            MapPolyline(coordinates: segment.coordinates)
+                .stroke(color, style: routeCoreStroke)
         }
     }
 
     // MARK: - Top Bar
 
     private var topBar: some View {
-        Group {
-            if appManager.isNavigating {
-                navigationChrome
-            } else {
-                HStack(alignment: .center, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 8) {
+                if appManager.isNavigating {
+                    exitNavigationButton
+                } else {
                     searchField
 
-                    if !isSearchActive {
-                        mapToolButton(icon: "location.fill", isActive: false) {
-                            userControlsCamera = false
-                            centerOnUserIfNeeded(force: true)
-                        }
-
-                        mapToolButton(icon: "square.3.layers.3d", isActive: showMapStyleMenu) {
-                            toggleMapStyleMenu()
-                        }
-                    } else {
+                    if isSearchActive {
                         Button {
                             withAnimation(MapAnimation.spring) {
                                 isSearchActive = false
@@ -329,10 +330,74 @@ struct MapView: View {
                         }
                     }
                 }
-                .animation(MapAnimation.spring, value: isSearchActive)
+
+                if appManager.isNavigating || !isSearchActive {
+                    mapToolButton(icon: "location.fill", isActive: false) {
+                        userControlsCamera = false
+                        if appManager.isNavigating, let location = locationManager.currentLocation {
+                            followUserDuringNavigation(at: location, animated: true)
+                        } else {
+                            centerOnUserIfNeeded(force: true)
+                        }
+                    }
+
+                    mapToolButton(icon: "square.3.layers.3d", isActive: showMapStyleMenu) {
+                        toggleMapStyleMenu()
+                    }
+                }
+            }
+            .animation(MapAnimation.spring, value: isSearchActive)
+            .animation(MapAnimation.spring, value: appManager.isNavigating)
+
+            if appManager.isNavigating {
+                HStack(spacing: 10) {
+                    speedLimitSignButton
+                    currentSpeedButton
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(MapAnimation.spring, value: appManager.isNavigating)
+    }
+
+    private var exitNavigationButton: some View {
+        Button(action: stopNavigation) {
+            HStack(spacing: 8) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                Text("Esci")
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 14)
+            .frame(height: mapBarHeight)
+            .frame(maxWidth: .infinity)
+            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: mapBarHeight / 2))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var speedLimitSignButton: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.red, lineWidth: 3.5)
+                .frame(width: 36, height: 36)
+            Text(speedLimitDisplay)
+                .font(.system(size: 15, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+        }
+        .frame(width: mapBarHeight, height: mapBarHeight)
+        .glassEffect(.regular.interactive(), in: Circle())
+    }
+
+    private var currentSpeedButton: some View {
+        Text(currentSpeedDisplay)
+            .font(.system(size: 16, weight: .bold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(.primary)
+            .frame(width: mapBarHeight, height: mapBarHeight)
+            .glassEffect(.regular.interactive(), in: Circle())
     }
 
     private var searchField: some View {
@@ -382,60 +447,6 @@ struct MapView: View {
         .onChange(of: isSearchActive) { _, active in
             if active { searchFieldFocused = true }
         }
-    }
-
-    private var navigationChrome: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Button(action: stopNavigation) {
-                HStack(spacing: 10) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 15, weight: .bold))
-                    Text("Esci")
-                        .font(.system(size: 16, weight: .semibold))
-                    Spacer()
-                }
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 16)
-                .frame(maxWidth: .infinity)
-                .frame(height: mapBarHeight)
-                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: mapBarHeight / 2))
-            }
-            .buttonStyle(.plain)
-
-            navigationHudButton(
-                value: speedLimitDisplay,
-                caption: "Limite",
-                icon: "signpost.right.fill",
-                tint: .orange
-            )
-
-            navigationHudButton(
-                value: currentSpeedDisplay,
-                caption: "Tu",
-                icon: "speedometer",
-                tint: .blue
-            )
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func navigationHudButton(value: String, caption: String, icon: String, tint: Color) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(tint)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(value)
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                Text(caption)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 14))
     }
 
     private var speedLimitDisplay: String {
@@ -570,93 +581,107 @@ struct MapView: View {
     // MARK: - Route Card
 
     private func routeCard(_ info: RouteInfo) -> some View {
-        VStack(spacing: 0) {
-            RoundedRectangle(cornerRadius: 2.5)
-                .fill(.secondary.opacity(0.4))
+        VStack(spacing: 18) {
+            Capsule()
+                .fill(.secondary.opacity(0.35))
                 .frame(width: 36, height: 5)
-                .padding(.top, 10)
-                .padding(.bottom, 14)
+                .padding(.top, 4)
 
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(info.placeName)
-                        .font(.system(size: 17, weight: .semibold))
-                        .lineLimit(1)
-                    Text("Route for \(motorcycle.displayName)")
-                        .font(.caption)
+                        .font(.system(size: 21, weight: .bold))
+                        .lineLimit(2)
+                    Text(motorcycle.displayName)
+                        .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(.secondary)
                     if info.avoidsHighways {
-                        Label("125cc legal route", systemImage: "checkmark.shield.fill")
-                            .font(.caption2)
+                        Label("Percorso 125cc", systemImage: "checkmark.shield.fill")
+                            .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(.green)
+                            .padding(.top, 2)
                     }
                 }
-                Spacer()
+
+                Spacer(minLength: 8)
+
                 Button(action: clearRoute) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 22))
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(.secondary)
+                        .frame(width: 30, height: 30)
+                        .background(.quaternary.opacity(0.55), in: Circle())
                 }
             }
-            .padding(.horizontal, 20)
 
             if let routeWarning {
                 Text(routeWarning)
-                    .font(.caption2)
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.orange)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
             }
 
-            HStack(spacing: 0) {
-                statCell(icon: "arrow.triangle.swap", value: info.distanceString, label: "Distance", color: .blue)
-                Divider().frame(height: 44)
-                statCell(icon: "clock", value: info.timeString, label: "Time", color: .orange)
-                Divider().frame(height: 44)
-                statCell(icon: "fuelpump", value: info.fuelString, label: "Fuel", color: .green)
+            HStack(spacing: 10) {
+                routeStatPill(icon: "arrow.left.and.right", value: info.distanceString, label: "Distanza", tint: .blue)
+                routeStatPill(icon: "clock.fill", value: info.timeString, label: "Tempo", tint: .orange)
+                routeStatPill(icon: "fuelpump.fill", value: info.fuelString, label: "Carburante", tint: .green)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 14)
 
             Button(action: startNavigation) {
-                HStack(spacing: 8) {
-                    Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
-                        .font(.system(size: 18))
-                    Text("Avvia navigazione")
+                HStack(spacing: 10) {
+                    Image(systemName: "location.fill")
                         .font(.system(size: 16, weight: .semibold))
+                    Text("Avvia")
+                        .font(.system(size: 17, weight: .semibold))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
+                .frame(height: 52)
+                .background(
+                    LinearGradient(
+                        colors: [Color.blue, Color.blue.opacity(0.82)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 16)
+                )
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 24)
+            .buttonStyle(.plain)
         }
-        .padding(.bottom, 8)
-        .padding(.horizontal, 8)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 28)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 28))
         .overlay(
-            RoundedRectangle(cornerRadius: 24)
-                .stroke(.white.opacity(0.12), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 28)
+                .stroke(.white.opacity(colorScheme == .dark ? 0.08 : 0.18), lineWidth: 0.5)
         )
-        .shadow(color: .black.opacity(0.18), radius: 24, y: -4)
+        .shadow(color: .black.opacity(0.14), radius: 28, y: -6)
+        .padding(.horizontal, 12)
         .transition(.move(edge: .bottom).combined(with: .opacity))
+        .onAppear { syncRouteActiveState(routeVisible: true) }
     }
 
-    private func statCell(icon: String, value: String, label: String, color: Color) -> some View {
-        VStack(spacing: 4) {
+    private func routeStatPill(icon: String, value: String, label: String, tint: Color) -> some View {
+        VStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 18))
-                .foregroundStyle(color)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(tint)
             Text(value)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 16, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             Text(label)
-                .font(.caption2)
+                .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 14))
     }
 
     // MARK: - Actions
@@ -702,12 +727,21 @@ struct MapView: View {
         let span = didInitialCenter ? 2000.0 : 3000.0
         didInitialCenter = true
 
-        withAnimation(MapAnimation.spring) {
-            cameraPosition = .region(MKCoordinateRegion(
+        setCamera(
+            .region(MKCoordinateRegion(
                 center: loc,
                 latitudinalMeters: span,
                 longitudinalMeters: span
-            ))
+            )),
+            animation: MapAnimation.spring
+        )
+    }
+
+    private func setCamera(_ position: MapCameraPosition, animation: Animation = MapAnimation.spring, duration: TimeInterval = 0.45) {
+        isProgrammaticCameraMove = true
+        withAnimation(animation) { cameraPosition = position }
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.08) {
+            isProgrammaticCameraMove = false
         }
     }
 
@@ -731,14 +765,18 @@ struct MapView: View {
     private func startNavigation() {
         guard routeInfo != nil else { return }
         closeMapStyleMenu()
+        userControlsCamera = false
+
         withAnimation(MapAnimation.spring) {
             appManager.isNavigating = true
             syncRouteActiveState(routeVisible: true)
         }
+
         locationManager.startNavigationTracking()
+
         if let location = locationManager.currentLocation {
             speedLimitService.update(for: location)
-            followUserDuringNavigation(at: location)
+            followUserDuringNavigation(at: location, animated: true)
         }
     }
 
@@ -750,16 +788,28 @@ struct MapView: View {
         speedLimitService.reset()
     }
 
-    private func followUserDuringNavigation(at location: CLLocation) {
+    private func followUserDuringNavigation(at location: CLLocation, animated: Bool = false) {
         guard !userControlsCamera else { return }
-        let heading = location.course >= 0 ? location.course : 0
-        withAnimation(MapAnimation.spring) {
-            cameraPosition = .camera(MapCamera(
-                centerCoordinate: location.coordinate,
-                distance: 480,
-                heading: heading,
-                pitch: 45
-            ))
+
+        if location.course >= 0 {
+            navigationHeading = location.course
+        }
+
+        let camera = MapCamera(
+            centerCoordinate: location.coordinate,
+            distance: 260,
+            heading: navigationHeading,
+            pitch: 62
+        )
+
+        if animated {
+            setCamera(.camera(camera), animation: MapAnimation.navigation, duration: 0.95)
+        } else {
+            isProgrammaticCameraMove = true
+            cameraPosition = .camera(camera)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                isProgrammaticCameraMove = false
+            }
         }
     }
 
@@ -811,13 +861,13 @@ struct MapView: View {
         }
 
         userControlsCamera = false
-        withAnimation(MapAnimation.spring) {
-            cameraPosition = .region(MKCoordinateRegion(
+        setCamera(
+            .region(MKCoordinateRegion(
                 center: place.coordinate,
                 latitudinalMeters: 6000,
                 longitudinalMeters: 6000
             ))
-        }
+        )
 
         calculateRoute(to: place)
     }
@@ -867,11 +917,13 @@ struct MapView: View {
                         avoidsHighways: isFullyLegal
                     )
                 }
+                syncRouteActiveState(routeVisible: true)
 
                 if !userControlsCamera {
-                    withAnimation(MapAnimation.spring) {
-                        cameraPosition = .rect(route.polyline.boundingMapRect.insetBy(dx: -5000, dy: -5000))
-                    }
+                    setCamera(
+                        .rect(route.polyline.boundingMapRect.insetBy(dx: -5000, dy: -5000)),
+                        duration: 0.55
+                    )
                 }
             }
         }

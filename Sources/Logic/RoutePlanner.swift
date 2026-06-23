@@ -8,30 +8,51 @@ struct TrafficSegment: Identifiable {
     let level: TrafficLevel
 }
 
-enum TrafficLevel {
+enum TrafficLevel: Equatable {
     case free
     case moderate
     case heavy
 
     var color: Color {
         switch self {
-        case .free: return Color(red: 0.2, green: 0.55, blue: 1.0)
-        case .moderate: return Color(red: 1.0, green: 0.82, blue: 0.1)
-        case .heavy: return Color(red: 1.0, green: 0.22, blue: 0.2)
+        case .free:
+            return Color(red: 0.0, green: 0.478, blue: 1.0)
+        case .moderate:
+            return Color(red: 1.0, green: 0.584, blue: 0.0)
+        case .heavy:
+            return Color(red: 0.937, green: 0.204, blue: 0.173)
         }
     }
 
+    var haloColor: Color { color.opacity(0.22) }
+    var glowColor: Color { color.opacity(0.42) }
+
     static func from(step: MKRoute.Step, route: MKRoute) -> TrafficLevel {
-        guard route.distance > 0, route.expectedTravelTime > 0, step.distance > 0 else {
+        guard route.distance > 0, route.expectedTravelTime > 0, step.distance > 30 else {
             return .free
         }
-        let routeKmh = (route.distance / route.expectedTravelTime) * 3.6
-        let stepShare = step.distance / route.distance
-        let estimatedStepKmh = max(8, routeKmh * (0.75 + stepShare))
 
-        if estimatedStepKmh < 22 { return .heavy }
-        if estimatedStepKmh < 48 { return .moderate }
+        let freeFlowKmh = estimatedFreeFlowSpeed(for: step)
+        let stepShare = step.distance / route.distance
+        let stepSeconds = max(1, route.expectedTravelTime * stepShare)
+        let actualKmh = (step.distance / stepSeconds) * 3.6
+        let ratio = actualKmh / freeFlowKmh
+
+        if ratio < 0.42 { return .heavy }
+        if ratio < 0.68 { return .moderate }
         return .free
+    }
+
+    private static func estimatedFreeFlowSpeed(for step: MKRoute.Step) -> Double {
+        let text = step.instructions.lowercased()
+
+        if text.contains("autostrada") || text.contains("superstrada") { return 95 }
+        if text.contains("tangenziale") || text.contains("raccordo") { return 75 }
+        if text.contains("ss ") || text.contains("strada statale") { return 65 }
+        if step.distance > 8000 { return 72 }
+        if step.distance > 3500 { return 58 }
+        if step.distance > 1200 { return 48 }
+        return 32
     }
 }
 
@@ -70,21 +91,68 @@ enum RoutePlanner {
     }
 
     static func trafficSegments(for route: MKRoute) -> [TrafficSegment] {
-        route.steps.compactMap { step in
-            guard step.distance > 20 else { return nil }
+        var segments: [TrafficSegment] = []
+
+        for step in route.steps where step.distance > 20 {
             let count = step.polyline.pointCount
-            guard count > 0 else { return nil }
+            guard count > 1 else { continue }
+
             var coords = [CLLocationCoordinate2D](repeating: kCLLocationCoordinate2DInvalid, count: count)
             step.polyline.getCoordinates(&coords, range: NSRange(location: 0, length: count))
-            return TrafficSegment(coordinates: coords, level: TrafficLevel.from(step: step, route: route))
+
+            let level = TrafficLevel.from(step: step, route: route)
+            let refined = subdivide(coords, level: level)
+
+            if let previous = segments.last?.level, previous != level, refined.count >= 2 {
+                let blend = blendSegment(between: segments.last!.coordinates.last!, and: refined[0].coordinates.first!, from: previous, to: level)
+                segments.append(blend)
+            }
+
+            segments.append(contentsOf: refined)
         }
+
+        return segments
+    }
+
+    private static func subdivide(_ coordinates: [CLLocationCoordinate2D], level: TrafficLevel) -> [TrafficSegment] {
+        guard coordinates.count > 2 else {
+            return [TrafficSegment(coordinates: coordinates, level: level)]
+        }
+
+        let chunkSize = 12
+        var result: [TrafficSegment] = []
+        var index = 0
+
+        while index < coordinates.count - 1 {
+            let end = min(index + chunkSize, coordinates.count - 1)
+            let slice = Array(coordinates[index...end])
+            if slice.count >= 2 {
+                result.append(TrafficSegment(coordinates: slice, level: level))
+            }
+            index = end
+        }
+
+        return result
+    }
+
+    private static func blendSegment(
+        between start: CLLocationCoordinate2D,
+        and end: CLLocationCoordinate2D,
+        from: TrafficLevel,
+        to: TrafficLevel
+    ) -> TrafficSegment {
+        let mid = CLLocationCoordinate2D(
+            latitude: (start.latitude + end.latitude) / 2,
+            longitude: (start.longitude + end.longitude) / 2
+        )
+        let blendLevel: TrafficLevel = (from == .heavy || to == .heavy) ? .moderate : .moderate
+        return TrafficSegment(coordinates: [start, mid, end], level: blendLevel)
     }
 
     static func mergedPolyline(from route: MKRoute) -> MKPolyline {
         route.polyline
     }
 
-    /// Estimates whether a route step is mostly urban, mixed, or extra-urban.
     static func drivingContext(for step: MKRoute.Step, route: MKRoute) -> RouteDrivingContext {
         guard route.distance > 0, route.expectedTravelTime > 0, step.distance > 0 else {
             return .urban
