@@ -69,6 +69,6 @@
 		</dict>
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Road ha bisogno della tua posizione per mostrarti la mappa e calcolare il percorso.</string>
+	<string>Road usa la tua posizione per la mappa, il percorso, la velocità in tempo reale e i limiti stradali durante la navigazione.</string>
 </dict>
 </plist>

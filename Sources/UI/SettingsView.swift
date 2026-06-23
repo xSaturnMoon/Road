@@ -120,7 +120,7 @@ struct SettingsView: View {
                 } header: {
                     Text("La mia moto")
                 } footer: {
-                    Text("Litri e tempo di percorrenza nella mappa si adattano al modello scelto.")
+                    Text("Valori basati su dati reali WMTC e consumi medi in uso reale. Il carburante del percorso considera anche il tipo di strada.")
                 }
 
                 Section("App") {

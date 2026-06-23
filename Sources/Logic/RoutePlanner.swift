@@ -83,4 +83,37 @@ enum RoutePlanner {
     static func mergedPolyline(from route: MKRoute) -> MKPolyline {
         route.polyline
     }
+
+    /// Estimates whether a route step is mostly urban, mixed, or extra-urban.
+    static func drivingContext(for step: MKRoute.Step, route: MKRoute) -> RouteDrivingContext {
+        guard route.distance > 0, route.expectedTravelTime > 0, step.distance > 0 else {
+            return .urban
+        }
+
+        let routeKmh = (route.distance / route.expectedTravelTime) * 3.6
+        let stepShare = step.distance / route.distance
+        let estimatedStepKmh = max(8, routeKmh * (0.75 + stepShare))
+
+        let text = step.instructions.lowercased()
+        let urbanHints = ["centro", "piazza", "via ", "viale ", "corso ", "largo ", "strada ", "rotonda"]
+        let looksUrban = urbanHints.contains(where: { text.contains($0) })
+
+        if estimatedStepKmh < 45 || looksUrban { return .urban }
+        if estimatedStepKmh < 72 { return .mixed }
+        return .extraUrban
+    }
+}
+
+enum RouteDrivingContext {
+    case urban
+    case mixed
+    case extraUrban
+
+    var consumptionMultiplier: Double {
+        switch self {
+        case .urban: return 1.18
+        case .mixed: return 1.0
+        case .extraUrban: return 0.92
+        }
+    }
 }

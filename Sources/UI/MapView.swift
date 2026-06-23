@@ -55,12 +55,15 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     private let manager = CLLocationManager()
 
     @Published var userLocation: CLLocationCoordinate2D?
+    @Published var currentLocation: CLLocation?
     @Published var authStatus: CLAuthorizationStatus = .notDetermined
 
     override init() {
         super.init()
         manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBest
+        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        manager.activityType = .automotiveNavigation
+        manager.distanceFilter = 5
         manager.requestWhenInUseAuthorization()
     }
 
@@ -68,8 +71,16 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         manager.startUpdatingLocation()
     }
 
+    func startNavigationTracking() {
+        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+        manager.distanceFilter = 3
+        manager.startUpdatingLocation()
+    }
+
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        userLocation = locations.last?.coordinate
+        guard let location = locations.last else { return }
+        currentLocation = location
+        userLocation = location.coordinate
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -98,7 +109,12 @@ struct RouteInfo: Equatable {
         travelMinutes < 60 ? "\(travelMinutes) min" : "\(travelMinutes / 60)h \(travelMinutes % 60)min"
     }
 
-    var fuelString: String { String(format: "%.1f L", fuelLiters) }
+    var fuelString: String {
+        if fuelLiters < 0.1 {
+            return String(format: "%.2f L", fuelLiters)
+        }
+        return String(format: "%.1f L", fuelLiters)
+    }
 }
 
 struct PlaceResult: Identifiable, Equatable {
@@ -120,6 +136,7 @@ struct MapView: View {
     @StateObject private var locationManager = LocationManager()
     @ObservedObject private var motorcycle = MotorcycleStore.shared
     @ObservedObject private var appManager = AppManager.shared
+    @ObservedObject private var speedLimitService = SpeedLimitService.shared
 
     @AppStorage("map_style_mode") private var mapStyleModeRaw = MapStyleMode.standard.rawValue
 
@@ -127,6 +144,7 @@ struct MapView: View {
     @State private var mapStylePhase: CGFloat = 1
     @State private var userControlsCamera = false
     @State private var didInitialCenter = false
+    @State private var activeRoute: MKRoute?
 
     @State private var searchText = ""
     @State private var isSearchActive = false
@@ -173,7 +191,15 @@ struct MapView: View {
                 calculateRoute(to: place)
             }
             .onChange(of: routeInfo) { _, newValue in
-                appManager.isRouteActive = newValue != nil
+                syncRouteActiveState(routeVisible: newValue != nil)
+            }
+            .onChange(of: appManager.isNavigating) { _, _ in
+                syncRouteActiveState(routeVisible: routeInfo != nil)
+            }
+            .onChange(of: locationManager.currentLocation) { _, location in
+                guard appManager.isNavigating, let location else { return }
+                speedLimitService.update(for: location)
+                followUserDuringNavigation(at: location)
             }
             .onChange(of: colorScheme) { _, _ in
                 guard mapStyleMode == .theme else { return }
@@ -226,7 +252,7 @@ struct MapView: View {
 
     @ViewBuilder
     private var routeOverlay: some View {
-        if let info = routeInfo {
+        if let info = routeInfo, !appManager.isNavigating {
             VStack {
                 Spacer()
                 routeCard(info)
@@ -271,35 +297,42 @@ struct MapView: View {
     // MARK: - Top Bar
 
     private var topBar: some View {
-        HStack(alignment: .center, spacing: 8) {
-            searchField
-
-            if !isSearchActive {
-                mapToolButton(icon: "location.fill", isActive: false) {
-                    userControlsCamera = false
-                    centerOnUserIfNeeded(force: true)
-                }
-
-                mapToolButton(icon: "square.3.layers.3d", isActive: showMapStyleMenu) {
-                    toggleMapStyleMenu()
-                }
+        Group {
+            if appManager.isNavigating {
+                navigationChrome
             } else {
-                Button {
-                    withAnimation(MapAnimation.spring) {
-                        isSearchActive = false
-                        searchText = ""
-                        searchResults = []
-                        searchFieldFocused = false
+                HStack(alignment: .center, spacing: 8) {
+                    searchField
+
+                    if !isSearchActive {
+                        mapToolButton(icon: "location.fill", isActive: false) {
+                            userControlsCamera = false
+                            centerOnUserIfNeeded(force: true)
+                        }
+
+                        mapToolButton(icon: "square.3.layers.3d", isActive: showMapStyleMenu) {
+                            toggleMapStyleMenu()
+                        }
+                    } else {
+                        Button {
+                            withAnimation(MapAnimation.spring) {
+                                isSearchActive = false
+                                searchText = ""
+                                searchResults = []
+                                searchFieldFocused = false
+                            }
+                        } label: {
+                            Text("Annulla")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.blue)
+                                .frame(height: mapBarHeight)
+                        }
                     }
-                } label: {
-                    Text("Cancel")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.blue)
-                        .frame(height: mapBarHeight)
                 }
+                .animation(MapAnimation.spring, value: isSearchActive)
             }
         }
-        .animation(MapAnimation.spring, value: isSearchActive)
+        .animation(MapAnimation.spring, value: appManager.isNavigating)
     }
 
     private var searchField: some View {
@@ -308,22 +341,20 @@ struct MapView: View {
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(.secondary)
 
-            ZStack(alignment: .leading) {
-                TextField("Search city or address...", text: $searchText)
+            if isSearchActive {
+                TextField("Cerca città o indirizzo...", text: $searchText)
                     .font(.system(size: 15))
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .focused($searchFieldFocused)
                     .onChange(of: searchText) { _, val in triggerSearch(val) }
                     .onSubmit { triggerSearch(searchText) }
-
-                if !isSearchActive {
-                    Text(selectedPlace?.name ?? "Search destination...")
-                        .font(.system(size: 15))
-                        .foregroundStyle(selectedPlace == nil ? .secondary : .primary)
-                        .lineLimit(1)
-                        .allowsHitTesting(false)
-                }
+            } else {
+                Text(selectedPlace?.name ?? "Cerca destinazione...")
+                    .font(.system(size: 15))
+                    .foregroundStyle(selectedPlace == nil ? .secondary : .primary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             Spacer(minLength: 0)
@@ -340,16 +371,91 @@ struct MapView: View {
         }
         .padding(.horizontal, 14)
         .frame(height: mapBarHeight)
+        .frame(maxWidth: .infinity)
         .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: mapBarHeight / 2))
         .contentShape(RoundedRectangle(cornerRadius: mapBarHeight / 2))
-        .onTapGesture { activateSearch() }
-    }
-
-    private func activateSearch() {
-        withAnimation(MapAnimation.spring) { isSearchActive = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+        .onTapGesture {
+            guard !isSearchActive else { return }
+            withAnimation(MapAnimation.spring) { isSearchActive = true }
             searchFieldFocused = true
         }
+        .onChange(of: isSearchActive) { _, active in
+            if active { searchFieldFocused = true }
+        }
+    }
+
+    private var navigationChrome: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button(action: stopNavigation) {
+                HStack(spacing: 10) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .bold))
+                    Text("Esci")
+                        .font(.system(size: 16, weight: .semibold))
+                    Spacer()
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 16)
+                .frame(maxWidth: .infinity)
+                .frame(height: mapBarHeight)
+                .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: mapBarHeight / 2))
+            }
+            .buttonStyle(.plain)
+
+            navigationHudButton(
+                value: speedLimitDisplay,
+                caption: "Limite",
+                icon: "signpost.right.fill",
+                tint: .orange
+            )
+
+            navigationHudButton(
+                value: currentSpeedDisplay,
+                caption: "Tu",
+                icon: "speedometer",
+                tint: .blue
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func navigationHudButton(value: String, caption: String, icon: String, tint: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(tint)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                Text(caption)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var speedLimitDisplay: String {
+        if speedLimitService.isLoading, speedLimitService.speedLimitKmh == nil {
+            return "…"
+        }
+        if let limit = speedLimitService.speedLimitKmh {
+            return "\(limit)"
+        }
+        return "—"
+    }
+
+    private var currentSpeedDisplay: String {
+        guard let location = locationManager.currentLocation,
+              location.speed >= 0,
+              location.horizontalAccuracy >= 0,
+              location.horizontalAccuracy <= 25 else {
+            return "0"
+        }
+        return "\(Int((location.speed * 3.6).rounded()))"
     }
 
     private func mapToolButton(icon: String, isActive: Bool, action: @escaping () -> Void) -> some View {
@@ -513,13 +619,11 @@ struct MapView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 14)
 
-            Button {
-                // Future: launch turn-by-turn
-            } label: {
+            Button(action: startNavigation) {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.triangle.turn.up.right.circle.fill")
                         .font(.system(size: 18))
-                    Text("Start Navigation")
+                    Text("Avvia navigazione")
                         .font(.system(size: 16, weight: .semibold))
                 }
                 .foregroundStyle(.white)
@@ -528,9 +632,10 @@ struct MapView: View {
                 .background(Color.blue, in: RoundedRectangle(cornerRadius: 14))
             }
             .padding(.horizontal, 20)
-            .padding(.bottom, 20)
+            .padding(.bottom, 24)
         }
         .padding(.bottom, 8)
+        .padding(.horizontal, 8)
         .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 24))
         .overlay(
             RoundedRectangle(cornerRadius: 24)
@@ -610,9 +715,51 @@ struct MapView: View {
         withAnimation(MapAnimation.spring) {
             selectedPlace = nil
             routeInfo = nil
+            activeRoute = nil
             trafficSegments = []
             routeWarning = nil
-            appManager.isRouteActive = false
+            appManager.isNavigating = false
+            syncRouteActiveState(routeVisible: false)
+            speedLimitService.reset()
+        }
+    }
+
+    private func syncRouteActiveState(routeVisible: Bool) {
+        appManager.isRouteActive = routeVisible || appManager.isNavigating
+    }
+
+    private func startNavigation() {
+        guard routeInfo != nil else { return }
+        closeMapStyleMenu()
+        withAnimation(MapAnimation.spring) {
+            appManager.isNavigating = true
+            syncRouteActiveState(routeVisible: true)
+        }
+        locationManager.startNavigationTracking()
+        if let location = locationManager.currentLocation {
+            speedLimitService.update(for: location)
+            followUserDuringNavigation(at: location)
+        }
+    }
+
+    private func stopNavigation() {
+        withAnimation(MapAnimation.spring) {
+            appManager.isNavigating = false
+            syncRouteActiveState(routeVisible: routeInfo != nil)
+        }
+        speedLimitService.reset()
+    }
+
+    private func followUserDuringNavigation(at location: CLLocation) {
+        guard !userControlsCamera else { return }
+        let heading = location.course >= 0 ? location.course : 0
+        withAnimation(MapAnimation.spring) {
+            cameraPosition = .camera(MapCamera(
+                centerCoordinate: location.coordinate,
+                distance: 480,
+                heading: heading,
+                pitch: 45
+            ))
         }
     }
 
@@ -700,15 +847,16 @@ struct MapView: View {
                 let route = RoutePlanner.best125ccRoute(from: routes) ?? routes[0]
                 let isFullyLegal = !RoutePlanner.usesForbiddenRoads(route)
 
+                activeRoute = route
                 trafficSegments = RoutePlanner.trafficSegments(for: route)
                 routeWarning = isFullyLegal
                     ? nil
-                    : "No fully legal 125cc route found. Showing the closest alternative without highways."
+                    : "Nessun percorso 125cc completamente legale. Mostrata l'alternativa più vicina."
 
                 let distKm = route.distance / 1000
                 let baseMins = Int(route.expectedTravelTime / 60)
                 let mins = motorcycle.travelMinutes(baseAutomobileMinutes: baseMins)
-                let fuel = motorcycle.fuelLiters(forDistanceKm: distKm)
+                let fuel = motorcycle.fuelLiters(forRoute: route)
 
                 withAnimation(MapAnimation.spring) {
                     routeInfo = RouteInfo(
