@@ -80,6 +80,9 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
 
     func requestLocation() {
         manager.startUpdatingLocation()
+        if CLLocationManager.headingAvailable() {
+            manager.startUpdatingHeading()
+        }
     }
 
     func startNavigationTracking() {
@@ -92,9 +95,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
     }
 
     func stopNavigationTracking() {
-        if CLLocationManager.headingAvailable() {
-            manager.stopUpdatingHeading()
-        }
+        // Keep heading active — needed for the direction cone on the user dot.
         manager.distanceFilter = 5
     }
 
@@ -234,6 +235,7 @@ struct MapView: View {
     @State private var showMapStyleMenu = false
     @State private var searchTask: Task<Void, Never>?
     @State private var menuAppeared = false
+    @State private var showIllegalRouteAlert = false
 
     private var mapStyleMode: MapStyleMode {
         MapStyleMode(rawValue: mapStyleModeRaw) ?? .standard
@@ -277,6 +279,10 @@ struct MapView: View {
                 guard appManager.isNavigating, let location else { return }
                 speedLimitService.update(for: location)
                 speedCameraService.update(for: location, heading: navigationHeading)
+                followUserDuringNavigation(at: location)
+            }
+            .onChange(of: locationManager.deviceHeading) { _, _ in
+                guard appManager.isNavigating, let location = locationManager.currentLocation else { return }
                 followUserDuringNavigation(at: location)
             }
             .onChange(of: colorScheme) { _, _ in
@@ -809,11 +815,18 @@ struct MapView: View {
                 routeStatPill(icon: "fuelpump.fill", value: info.fuelString, label: "Carburante", tint: .green)
             }
 
-            Button(action: startNavigation) {
+            let isIllegal = routeWarning != nil
+            Button {
+                if isIllegal {
+                    showIllegalRouteAlert = true
+                } else {
+                    startNavigation()
+                }
+            } label: {
                 HStack(spacing: 10) {
-                    Image(systemName: "location.fill")
+                    Image(systemName: isIllegal ? "exclamationmark.triangle.fill" : "location.fill")
                         .font(.system(size: 16, weight: .semibold))
-                    Text("Avvia")
+                    Text(isIllegal ? "Percorso non consigliato" : "Avvia")
                         .font(.system(size: 17, weight: .semibold))
                 }
                 .foregroundStyle(.white)
@@ -821,7 +834,9 @@ struct MapView: View {
                 .frame(height: 52)
                 .background(
                     LinearGradient(
-                        colors: [Color.blue, Color.blue.opacity(0.82)],
+                        colors: isIllegal
+                            ? [Color.orange, Color.orange.opacity(0.82)]
+                            : [Color.blue, Color.blue.opacity(0.82)],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ),
@@ -829,6 +844,12 @@ struct MapView: View {
                 )
             }
             .buttonStyle(.plain)
+            .alert("Percorso con tratti non consentiti", isPresented: $showIllegalRouteAlert) {
+                Button("Annulla", role: .cancel) { }
+                Button("Avvia comunque", role: .destructive) { startNavigation() }
+            } message: {
+                Text("Questo percorso potrebbe includere autostrade o tangenziali vietate ai 125cc. Con la patente A1 non puoi circolare su queste strade.\n\nVuoi avviare la navigazione lo stesso?")
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 10)
@@ -1025,7 +1046,7 @@ struct MapView: View {
 
     private func smoothHeading(toward target: CLLocationDirection) -> CLLocationDirection {
         let delta = ((target - navigationHeading + 540).truncatingRemainder(dividingBy: 360)) - 180
-        navigationHeading = (navigationHeading + delta * 0.18 + 360).truncatingRemainder(dividingBy: 360)
+        navigationHeading = (navigationHeading + delta * 0.32 + 360).truncatingRemainder(dividingBy: 360)
         return navigationHeading
     }
 
