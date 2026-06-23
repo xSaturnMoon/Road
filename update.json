@@ -1,5 +1,5 @@
 {
-  "version": "1.2.56",
+  "version": "1.2.57",
   "notes": "Barra ricerca Map corretta, consumi realistici, tab bar nascosta sul percorso, navigazione attiva con limite di velocità OSM e velocità GPS in tempo reale, UI Liquid Glass iOS 26.",
   "url": "https://github.com/xSaturnMoon/Road/releases/download/latest/Road.ipa"
 }
