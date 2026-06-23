@@ -460,11 +460,11 @@ struct MapView: View {
             }
         }
 
-        ForEach(trafficSegments) { segment in
-            MapPolyline(coordinates: segment.coordinates)
+        if let route = activeRoute {
+            MapPolyline(route.polyline)
                 .stroke(.white, style: routeOutlineStroke)
-            MapPolyline(coordinates: segment.coordinates)
-                .stroke(segment.level.color, style: routeFillStroke)
+            MapPolyline(route.polyline)
+                .stroke(Color(red: 0.0, green: 0.478, blue: 1.0), style: routeFillStroke)
         }
     }
 
@@ -997,12 +997,12 @@ struct MapView: View {
         guard !userControlsCamera else { return }
 
         let heading = resolvedNavigationHeading(for: location)
-        let pitch = isNavigation3D ? 62.0 : 0.0
-        let distance = isNavigation3D ? 260.0 : 520.0
+        let pitch = isNavigation3D ? 45.0 : 0.0
+        let distance = isNavigation3D ? 380.0 : 600.0
         let center = offsetCoordinate(
             from: location.coordinate,
             bearing: heading,
-            distanceMeters: isNavigation3D ? 90 : 0
+            distanceMeters: isNavigation3D ? 30 : 0
         )
 
         let camera = MapCamera(
@@ -1165,11 +1165,26 @@ struct MapView: View {
                     return
                 }
 
+                // Hard block: if even the best route uses forbidden roads, refuse it
+                if !selection.isFullyLegal {
+                    let allIllegal = routes.allSatisfy { RoutePlanner.usesForbiddenRoads($0) }
+                    if allIllegal {
+                        routeInfo = nil
+                        activeRoute = selection.route
+                        trafficSegments = []
+                        routeWarning = "Nessun percorso disponibile senza autostrade o tangenziali. Con la patente A1 non è possibile raggiungere questa destinazione."
+                        if !userControlsCamera {
+                            setCamera(.rect(selection.route.polyline.boundingMapRect.insetBy(dx: -5000, dy: -5000)), duration: 0.55)
+                        }
+                        return
+                    }
+                }
+
                 let route = selection.route
                 let isFullyLegal = selection.isFullyLegal
 
                 activeRoute = route
-                trafficSegments = RoutePlanner.trafficSegments(for: route)
+                trafficSegments = []
                 routeWarning = isFullyLegal
                     ? nil
                     : "Attenzione: il percorso potrebbe includere tratti non consentiti a 125cc. Verifica prima di partire."

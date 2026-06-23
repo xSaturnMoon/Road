@@ -75,11 +75,28 @@ enum RoutePlanner {
     ]
 
     private static let highwayInstructionPatterns = [
+        // imperative forms (what MKDirections actually outputs)
+        #"prendi\s+(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
+        #"immettiti\s+(?:su\s+)?(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
+        #"continua\s+(?:su\s+)?(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
+        // infinitive forms (fallback)
         #"prendere\s+(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
         #"immettersi\s+(?:su\s+)?(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
         #"continuare\s+(?:su\s+)?(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
-        #"autostrada\s+a\s*\d{1,2}\b"#,
-        #"tangenziale\s+(?:di\s+)?(?:roma|milano|torino|napoli|bologna|firenze|genova|palermo)"#
+        // preposition + highway code: "sull'A1", "sulla A14", "su A4"
+        #"(?:sull['']|sulla\s+|su\s+)a\s*\d{1,2}\b"#,
+        // highway code + direction: "A1 direzione Roma", "A4 verso Milano"
+        #"\ba\s*\d{1,2}\s+(?:direzione|verso|per|dir\.?)\b"#,
+        // standalone highway code as a word (e.g. "A1", "A14", "RA10")
+        #"\bra?\s*\d{1,2}\b"#,
+        // Grande Raccordo Anulare
+        #"\bgra\b"#,
+        // named tangenziali
+        #"tangenziale\s+(?:di\s+)?(?:roma|milano|torino|napoli|bologna|firenze|genova|palermo|venezia|verona|brescia|bergamo|padova|modena|reggio)"#,
+        // English highway patterns
+        #"take\s+(?:the\s+)?(?:a|m)\s*\d{1,2}\b"#,
+        #"merge\s+onto\s+(?:the\s+)?(?:a|m)\s*\d{1,2}\b"#,
+        #"continue\s+on\s+(?:the\s+)?(?:a|m)\s*\d{1,2}\b"#,
     ]
 
     struct RouteSelection {
