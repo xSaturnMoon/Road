@@ -57,46 +57,30 @@ enum TrafficLevel: Equatable {
 }
 
 enum RoutePlanner {
+
+    // Only patterns that are UNAMBIGUOUSLY Italian motorways/tangenziali.
+    // Intentionally conservative: false negatives (missing a highway) are
+    // better than false positives (blocking every route).
     private static let strongForbiddenPhrases = [
-        // — Italiano —
-        "autostrada", "autostrade", "in autostrada", "sull'autostrada", "sull'autostrade",
-        "tangenziale est", "tangenziale ovest", "tangenziale nord", "tangenziale sud",
-        "tangenziale interna", "tangenziale esterna", " sulla tangenziale", " in tangenziale",
-        "raccordo anulare", "grande raccordo anulare", "g.r.a.", " g.r.a ",
-        "casello autostradale", " casello ", " pedaggio", " pedaggi ", "stazione di pedaggio",
-        "superstrada a pedaggio", "immettersi in autostrada", "prendere l'autostrada",
-        "entrare in autostrada", "diramazione autostradale", "bretella autostradale",
-        "viadotto autostradale", " tratto autostradale",
-        // — English (MKDirections may return English instructions) —
-        "motorway", "highway", "freeway", "expressway",
-        "take the toll", "toll road", "toll booth", "toll plaza",
-        "join the motorway", "take motorway", "merge onto the highway",
-        "take the freeway", "enter the motorway", "ring road"
+        "autostrada", "autostrade",
+        "tangenziale",
+        "raccordo anulare", "grande raccordo anulare", "g.r.a.",
+        "casello autostradale", "stazione di pedaggio",
+        "superstrada a pedaggio",
+        "diramazione autostradale", "bretella autostradale",
     ]
 
     private static let highwayInstructionPatterns = [
-        // imperative forms (what MKDirections actually outputs)
-        #"prendi\s+(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
-        #"immettiti\s+(?:su\s+)?(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
-        #"continua\s+(?:su\s+)?(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
-        // infinitive forms (fallback)
-        #"prendere\s+(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
-        #"immettersi\s+(?:su\s+)?(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
-        #"continuare\s+(?:su\s+)?(?:l['']|la\s+)?a\s*\d{1,2}\b"#,
-        // preposition + highway code: "sull'A1", "sulla A14", "su A4"
-        #"(?:sull['']|sulla\s+|su\s+)a\s*\d{1,2}\b"#,
-        // highway code + direction: "A1 direzione Roma", "A4 verso Milano"
-        #"\ba\s*\d{1,2}\s+(?:direzione|verso|per|dir\.?)\b"#,
-        // standalone highway code as a word (e.g. "A1", "A14", "RA10")
-        #"\bra?\s*\d{1,2}\b"#,
-        // Grande Raccordo Anulare
-        #"\bgra\b"#,
-        // named tangenziali
-        #"tangenziale\s+(?:di\s+)?(?:roma|milano|torino|napoli|bologna|firenze|genova|palermo|venezia|verona|brescia|bergamo|padova|modena|reggio)"#,
-        // English highway patterns
-        #"take\s+(?:the\s+)?(?:a|m)\s*\d{1,2}\b"#,
-        #"merge\s+onto\s+(?:the\s+)?(?:a|m)\s*\d{1,2}\b"#,
-        #"continue\s+on\s+(?:the\s+)?(?:a|m)\s*\d{1,2}\b"#,
+        // Italian highway codes with obligatory preposition/article:
+        // "sull'A1", "sull'A14", "sulla A4", "per l'A1"
+        #"(?:sull['']|sulla\s+|per\s+l[''])a\d{1,2}\b"#,
+        // verb + article + code: "prendi l'A1", "continua sull'A14"
+        #"(?:prendi|immettiti|continua|prendere|immettersi|continuare)\s+(?:(?:su(?:ll['']?|lla\s+))|l['']|la\s+)a\d{1,2}\b"#,
+        // code + direction (NO space between A and digit): "A1 direzione Roma"
+        #"\ba\d{1,2}\s+(?:direzione|verso|dir\.?)\b"#,
+        // English: "motorway", "take the M25", "merge onto A14"
+        #"\bmotorway\b"#,
+        #"(?:take|merge onto|continue on)\s+(?:the\s+)?[am]\d{1,2}\b"#,
     ]
 
     struct RouteSelection {
