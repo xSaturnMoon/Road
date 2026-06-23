@@ -167,7 +167,7 @@ final class SpeedCameraService: ObservableObject {
         }
 
         return buckets.map { key, value in
-            let resolvedType = value.types.contains(.section) ? .section
+            let resolvedType: SpeedCamera.CameraType = value.types.contains(.section) ? .section
                 : value.types.contains(.mobile) ? .mobile
                 : value.types.contains(.redLight) ? .redLight
                 : .fixed
