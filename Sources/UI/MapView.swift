@@ -44,6 +44,7 @@ private enum MapAnimation {
     static let style = Animation.smooth(duration: 0.55)
     static let menu = Animation.smooth(duration: 0.32)
     static let navigation = Animation.smooth(duration: 0.95)
+    static let heading = Animation.linear(duration: 0.18)
 }
 
 private let mapBarHeight: CGFloat = 44
@@ -74,7 +75,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         manager.activityType = .automotiveNavigation
         manager.distanceFilter = 5
-        manager.headingFilter = 5
+        manager.headingFilter = 2
         manager.requestWhenInUseAuthorization()
     }
 
@@ -283,7 +284,7 @@ struct MapView: View {
             }
             .onChange(of: locationManager.deviceHeading) { _, _ in
                 guard appManager.isNavigating, let location = locationManager.currentLocation else { return }
-                followUserDuringNavigation(at: location)
+                followUserDuringNavigation(at: location, animated: true, animation: MapAnimation.heading)
             }
             .onChange(of: colorScheme) { _, _ in
                 guard mapStyleMode == .theme else { return }
@@ -960,8 +961,7 @@ struct MapView: View {
     }
 
     private func syncRouteActiveState() {
-        // Tab bar hidden only during active turn-by-turn navigation.
-        appManager.isRouteActive = appManager.isNavigating
+        appManager.isRouteActive = false
     }
 
     private func startNavigation() {
@@ -997,7 +997,7 @@ struct MapView: View {
         speedCameraService.reset()
     }
 
-    private func followUserDuringNavigation(at location: CLLocation, animated: Bool = false) {
+    private func followUserDuringNavigation(at location: CLLocation, animated: Bool = false, animation: Animation = MapAnimation.navigation) {
         guard !userControlsCamera else { return }
 
         let heading = resolvedNavigationHeading(for: location)
@@ -1017,7 +1017,7 @@ struct MapView: View {
         )
 
         if animated {
-            setCamera(.camera(camera), animation: MapAnimation.navigation, duration: 0.95)
+            setCamera(.camera(camera), animation: animation, duration: animation == MapAnimation.heading ? 0.18 : 0.95)
         } else {
             isProgrammaticCameraMove = true
             cameraPosition = .camera(camera)
