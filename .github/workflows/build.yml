@@ -86,6 +86,7 @@ jobs:
             -scheme Road \
             -configuration Release \
             -archivePath build/Road.xcarchive \
+            -destination 'generic/platform=iOS' \
             PRODUCT_BUNDLE_IDENTIFIER=com.road.app \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
