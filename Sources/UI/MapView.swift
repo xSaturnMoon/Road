@@ -237,6 +237,9 @@ struct MapView: View {
     @State private var menuAppeared = false
     @State private var showIllegalRouteAlert = false
     @State private var headingTimer: Timer?
+    @State private var currentStepIndex: Int = 0
+    @State private var distanceToNextStepM: Double = 0
+    @State private var navigationStartDate: Date?
 
     private var mapStyleMode: MapStyleMode {
         MapStyleMode(rawValue: mapStyleModeRaw) ?? .standard
@@ -252,6 +255,24 @@ struct MapView: View {
             routeOverlay
             routeWarningOverlay
             speedCameraAlertOverlay
+            // Navigation bottom bar + 2D/3D toggle
+            if appManager.isNavigating {
+                VStack {
+                    Spacer()
+                    HStack(alignment: .bottom) {
+                        perspectiveToggleButton
+                        Spacer()
+                        currentSpeedButton
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                    navigationBottomBar
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 4)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .animation(MapAnimation.spring, value: appManager.isNavigating)
+            }
         }
         return view
             .onAppear {
@@ -280,6 +301,7 @@ struct MapView: View {
                 guard appManager.isNavigating, let location else { return }
                 speedLimitService.update(for: location)
                 speedCameraService.update(for: location, heading: navigationHeading)
+                updateNavigationProgress(for: location)
             }
             .onChange(of: colorScheme) { _, _ in
                 guard mapStyleMode == .theme else { return }
@@ -510,17 +532,9 @@ struct MapView: View {
             .animation(MapAnimation.spring, value: appManager.isNavigating)
 
             if appManager.isNavigating {
-                HStack(alignment: .top, spacing: 0) {
-                    VStack(spacing: 10) {
-                        speedLimitSignButton
-                        currentSpeedButton
-                    }
-
-                    Spacer(minLength: 0)
-
-                    perspectiveToggleButton
-                }
-                .transition(.move(edge: .top).combined(with: .opacity))
+                navigationInstructionBanner
+                    .padding(.top, 8)
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
     }
@@ -961,6 +975,10 @@ struct MapView: View {
         closeMapStyleMenu()
         userControlsCamera = false
         isNavigation3D = true
+        currentStepIndex = 0
+        distanceToNextStepM = 0
+        navigationStartDate = Date()
+        isProgrammaticCameraMove = true   // stays true for entire navigation session
 
         withAnimation(MapAnimation.spring) {
             appManager.isNavigating = true
@@ -978,12 +996,11 @@ struct MapView: View {
             followUserDuringNavigation(at: location, animated: true)
         }
 
-        // 60 fps heading timer — smooth rotation like Apple Maps
         headingTimer?.invalidate()
         headingTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
             DispatchQueue.main.async {
                 guard let location = locationManager.currentLocation else { return }
-                followUserDuringNavigation(at: location)
+                self.followUserDuringNavigation(at: location)
             }
         }
     }
@@ -991,6 +1008,9 @@ struct MapView: View {
     private func stopNavigation() {
         headingTimer?.invalidate()
         headingTimer = nil
+        isProgrammaticCameraMove = false
+        navigationStartDate = nil
+        currentStepIndex = 0
         locationManager.stopNavigationTracking()
         withAnimation(MapAnimation.spring) {
             appManager.isNavigating = false
@@ -1004,12 +1024,13 @@ struct MapView: View {
         guard !userControlsCamera else { return }
 
         let heading = resolvedNavigationHeading(for: location)
-        let pitch = isNavigation3D ? 38.0 : 0.0
-        let distance = isNavigation3D ? 350.0 : 600.0
+        let pitch    = isNavigation3D ? 30.0  : 0.0
+        let distance = isNavigation3D ? 280.0 : 600.0
+        // Offset center forward so user dot sits in lower third of screen
         let center = offsetCoordinate(
             from: location.coordinate,
             bearing: heading,
-            distanceMeters: isNavigation3D ? 20 : 0
+            distanceMeters: isNavigation3D ? 80 : 0
         )
 
         let camera = MapCamera(
@@ -1020,13 +1041,9 @@ struct MapView: View {
         )
 
         if animated {
-            setCamera(.camera(camera), animation: MapAnimation.navigation, duration: 0.95)
+            withAnimation(MapAnimation.navigation) { cameraPosition = .camera(camera) }
         } else {
-            isProgrammaticCameraMove = true
             cameraPosition = .camera(camera)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                isProgrammaticCameraMove = false
-            }
         }
     }
 
@@ -1079,6 +1096,159 @@ struct MapView: View {
             latitude: newLat * 180 / .pi,
             longitude: newLon * 180 / .pi
         )
+    }
+
+    private func updateNavigationProgress(for location: CLLocation) {
+        guard let route = activeRoute else { return }
+        let steps = route.steps
+        guard currentStepIndex < steps.count else { return }
+
+        let step = steps[currentStepIndex]
+        let pts = step.polyline.points()
+        guard step.polyline.pointCount > 0 else { return }
+        let lastPt = pts[step.polyline.pointCount - 1]
+        let stepEnd = CLLocation(latitude: lastPt.coordinate.latitude,
+                                 longitude: lastPt.coordinate.longitude)
+        let dist = location.distance(from: stepEnd)
+        distanceToNextStepM = dist
+
+        // Advance step when within 25 m of waypoint
+        if dist < 25, currentStepIndex < steps.count - 1 {
+            withAnimation(.easeInOut(duration: 0.3)) { currentStepIndex += 1 }
+        }
+    }
+
+    // MARK: - Navigation step helpers
+
+    private var nextStep: MKRoute.Step? {
+        guard let route = activeRoute else { return nil }
+        let steps = route.steps
+        let next = currentStepIndex + 1
+        return next < steps.count ? steps[next] : steps.last
+    }
+
+    private var currentInstruction: String {
+        guard let route = activeRoute else { return "" }
+        let steps = route.steps
+        guard currentStepIndex < steps.count else { return "" }
+        let instr = steps[currentStepIndex].instructions
+        return instr.isEmpty ? "Procedi dritto" : instr
+    }
+
+    private var maneuverIcon: String {
+        let t = currentInstruction.lowercased()
+        if t.contains("rotonda") || t.contains("roundabout")   { return "arrow.triangle.turn.up.right.circle" }
+        if t.contains("leggermente a sinistra") || t.contains("slight left") { return "arrow.turn.up.left" }
+        if t.contains("leggermente a destra") || t.contains("slight right")  { return "arrow.turn.up.right" }
+        if t.contains("sinistra") || t.contains("left")  { return "arrow.turn.up.left" }
+        if t.contains("destra")   || t.contains("right") { return "arrow.turn.up.right" }
+        if t.contains("destinazione") || t.contains("destination") || t.contains("arriva") { return "flag.checkered" }
+        if t.contains("inverti")  || t.contains("u-turn") { return "arrow.uturn.left" }
+        return "arrow.up"
+    }
+
+    private var stepDistanceLabel: String {
+        let m = distanceToNextStepM
+        if m < 50  { return "Ora" }
+        if m < 950 { return "In \(Int((m / 50).rounded()) * 50) m" }
+        return String(format: "In %.1f km", m / 1000)
+    }
+
+    private var remainingRouteInfo: (time: String, distance: String, eta: String) {
+        guard let info = routeInfo, let start = navigationStartDate else {
+            return ("--", "--", "--")
+        }
+        let elapsed = Date().timeIntervalSince(start)
+        let totalSec = Double(info.travelMinutes) * 60
+        let remaining = max(0, totalSec - elapsed)
+        let remMin = Int(remaining / 60)
+        let timeStr = remMin < 60 ? "\(remMin) min" : "\(remMin / 60)h \(remMin % 60)m"
+
+        let fraction = min(1, elapsed / totalSec)
+        let remKm = info.distanceKm * (1 - fraction)
+        let distStr = remKm < 1 ? "\(Int(remKm * 1000)) m" : String(format: "%.1f km", remKm)
+
+        let eta = Date().addingTimeInterval(remaining)
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm"
+        return (timeStr, distStr, fmt.string(from: eta))
+    }
+
+    // MARK: - Navigation HUD views
+
+    private var navigationInstructionBanner: some View {
+        HStack(alignment: .center, spacing: 14) {
+            Image(systemName: maneuverIcon)
+                .font(.system(size: 38, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 48)
+                .contentTransition(.symbolEffect(.replace))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(stepDistanceLabel)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+                Text(currentInstruction)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(Color(red: 0.1, green: 0.38, blue: 0.95), in: RoundedRectangle(cornerRadius: 18))
+        .shadow(color: .black.opacity(0.22), radius: 12, y: 4)
+        .animation(.easeInOut(duration: 0.25), value: currentInstruction)
+    }
+
+    private var navigationBottomBar: some View {
+        let info = remainingRouteInfo
+        return HStack(spacing: 0) {
+            // Speed limit
+            ZStack {
+                Circle().stroke(Color.red, lineWidth: 3.5).frame(width: 34, height: 34)
+                Text(speedLimitDisplay)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+            }
+            .frame(width: 48)
+
+            Divider().frame(height: 32).padding(.horizontal, 8)
+
+            // ETA
+            VStack(alignment: .leading, spacing: 1) {
+                Text(info.eta)
+                    .font(.system(size: 22, weight: .bold))
+                Text(info.time)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            // Remaining distance
+            Text(info.distance)
+                .font(.system(size: 18, weight: .semibold))
+
+            Spacer()
+
+            // Stop button
+            Button(action: stopNavigation) {
+                Text("Fine")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 11)
+                    .background(Color.red, in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .shadow(color: .black.opacity(0.15), radius: 12, y: -4)
     }
 
     private func triggerSearch(_ query: String) {
