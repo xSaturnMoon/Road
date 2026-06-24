@@ -1,4 +1,4 @@
 {
-    "version": "1.2.60",
+    "version": "1.2.61",
     "notes": "Barra ricerca Map corretta, consumi realistici, tab bar nascosta sul percorso, navigazione attiva con limite di velocit\u00e0 OSM e velocit\u00e0 GPS in tempo reale, UI Liquid Glass iOS 26."
 }
