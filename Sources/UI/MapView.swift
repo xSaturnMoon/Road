@@ -452,6 +452,8 @@ struct MapView: View {
         .mapStyle(mapStyleMode.style(showsTraffic: true))
         .mapControls { }
         .onMapCameraChange(frequency: .onEnd) { _ in
+            // During navigation the 60fps timer owns the camera — ignore gesture-end events
+            guard !appManager.isNavigating else { return }
             if !isProgrammaticCameraMove {
                 userControlsCamera = true
             }
@@ -948,7 +950,10 @@ struct MapView: View {
         isProgrammaticCameraMove = true
         withAnimation(animation) { cameraPosition = position }
         DispatchQueue.main.asyncAfter(deadline: .now() + duration + 0.08) {
-            isProgrammaticCameraMove = false
+            // Never release the flag during active navigation — the 60fps timer owns the camera
+            if !appManager.isNavigating {
+                isProgrammaticCameraMove = false
+            }
         }
     }
 
@@ -1024,13 +1029,13 @@ struct MapView: View {
         guard !userControlsCamera else { return }
 
         let heading = resolvedNavigationHeading(for: location)
-        let pitch    = isNavigation3D ? 30.0  : 0.0
-        let distance = isNavigation3D ? 280.0 : 600.0
+        let pitch    = isNavigation3D ? 50.0  : 0.0
+        let distance = isNavigation3D ? 220.0 : 600.0
         // Offset center forward so user dot sits in lower third of screen
         let center = offsetCoordinate(
             from: location.coordinate,
             bearing: heading,
-            distanceMeters: isNavigation3D ? 80 : 0
+            distanceMeters: isNavigation3D ? 70 : 0
         )
 
         let camera = MapCamera(
@@ -1179,18 +1184,18 @@ struct MapView: View {
     private var navigationInstructionBanner: some View {
         HStack(alignment: .center, spacing: 14) {
             Image(systemName: maneuverIcon)
-                .font(.system(size: 38, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 48)
+                .font(.system(size: 36, weight: .bold))
+                .foregroundStyle(.blue)
+                .frame(width: 46)
                 .contentTransition(.symbolEffect(.replace))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(stepDistanceLabel)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.75))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
                 Text(currentInstruction)
                     .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1198,29 +1203,30 @@ struct MapView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
-        .background(Color(red: 0.1, green: 0.38, blue: 0.95), in: RoundedRectangle(cornerRadius: 18))
-        .shadow(color: .black.opacity(0.22), radius: 12, y: 4)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 20))
+        .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
         .animation(.easeInOut(duration: 0.25), value: currentInstruction)
     }
 
     private var navigationBottomBar: some View {
         let info = remainingRouteInfo
         return HStack(spacing: 0) {
-            // Speed limit
+            // Speed limit sign
             ZStack {
                 Circle().stroke(Color.red, lineWidth: 3.5).frame(width: 34, height: 34)
                 Text(speedLimitDisplay)
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .monospacedDigit()
+                    .foregroundStyle(.primary)
             }
-            .frame(width: 48)
+            .frame(width: 46)
 
-            Divider().frame(height: 32).padding(.horizontal, 8)
+            Divider().frame(height: 30).padding(.horizontal, 10)
 
-            // ETA
             VStack(alignment: .leading, spacing: 1) {
                 Text(info.eta)
                     .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(.primary)
                 Text(info.time)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
@@ -1228,13 +1234,12 @@ struct MapView: View {
 
             Spacer()
 
-            // Remaining distance
             Text(info.distance)
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.primary)
 
             Spacer()
 
-            // Stop button
             Button(action: stopNavigation) {
                 Text("Fine")
                     .font(.system(size: 15, weight: .bold))
@@ -1247,8 +1252,8 @@ struct MapView: View {
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-        .shadow(color: .black.opacity(0.15), radius: 12, y: -4)
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22))
+        .shadow(color: .black.opacity(0.12), radius: 12, y: -2)
     }
 
     private func triggerSearch(_ query: String) {
