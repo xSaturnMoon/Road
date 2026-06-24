@@ -48,8 +48,8 @@ private enum MapAnimation {
 }
 
 private let mapBarHeight: CGFloat = 44
-private let routeOutlineStroke = StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round)
-private let routeFillStroke   = StrokeStyle(lineWidth: 6,  lineCap: .round, lineJoin: .round)
+private let routeOutlineStroke = StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round)
+private let routeFillStroke   = StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round)
 
 // MARK: - Location Manager
 
@@ -236,6 +236,7 @@ struct MapView: View {
     @State private var searchTask: Task<Void, Never>?
     @State private var menuAppeared = false
     @State private var showIllegalRouteAlert = false
+    @State private var headingTimer: Timer?
 
     private var mapStyleMode: MapStyleMode {
         MapStyleMode(rawValue: mapStyleModeRaw) ?? .standard
@@ -279,11 +280,6 @@ struct MapView: View {
                 guard appManager.isNavigating, let location else { return }
                 speedLimitService.update(for: location)
                 speedCameraService.update(for: location, heading: navigationHeading)
-                followUserDuringNavigation(at: location)
-            }
-            .onChange(of: locationManager.deviceHeading) { _, _ in
-                guard appManager.isNavigating, let location = locationManager.currentLocation else { return }
-                followUserDuringNavigation(at: location)
             }
             .onChange(of: colorScheme) { _, _ in
                 guard mapStyleMode == .theme else { return }
@@ -981,9 +977,20 @@ struct MapView: View {
             speedLimitService.update(for: location)
             followUserDuringNavigation(at: location, animated: true)
         }
+
+        // 60 fps heading timer — smooth rotation like Apple Maps
+        headingTimer?.invalidate()
+        headingTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
+            DispatchQueue.main.async {
+                guard let location = locationManager.currentLocation else { return }
+                followUserDuringNavigation(at: location)
+            }
+        }
     }
 
     private func stopNavigation() {
+        headingTimer?.invalidate()
+        headingTimer = nil
         locationManager.stopNavigationTracking()
         withAnimation(MapAnimation.spring) {
             appManager.isNavigating = false
@@ -997,12 +1004,12 @@ struct MapView: View {
         guard !userControlsCamera else { return }
 
         let heading = resolvedNavigationHeading(for: location)
-        let pitch = isNavigation3D ? 45.0 : 0.0
-        let distance = isNavigation3D ? 380.0 : 600.0
+        let pitch = isNavigation3D ? 38.0 : 0.0
+        let distance = isNavigation3D ? 350.0 : 600.0
         let center = offsetCoordinate(
             from: location.coordinate,
             bearing: heading,
-            distanceMeters: isNavigation3D ? 30 : 0
+            distanceMeters: isNavigation3D ? 20 : 0
         )
 
         let camera = MapCamera(
