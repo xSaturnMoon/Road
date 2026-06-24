@@ -458,7 +458,7 @@ struct MapView: View {
         .mapStyle(mapStyleMode.style(showsTraffic: true))
         .mapControls { }
         .onMapCameraChange(frequency: .onEnd) { (context: MapCameraUpdateContext) in
-            if context.isUserInitiated {
+            if !isProgrammaticCameraMove {
                 userControlsCamera = true
             }
         }
