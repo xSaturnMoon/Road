@@ -73,7 +73,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         manager.activityType = .automotiveNavigation
-        manager.distanceFilter = 5
+        manager.distanceFilter = kCLDistanceFilterNone
         manager.headingFilter = 1
         manager.requestWhenInUseAuthorization()
     }
@@ -87,7 +87,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
 
     func startNavigationTracking() {
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        manager.distanceFilter = 2
+        manager.distanceFilter = kCLDistanceFilterNone
         manager.startUpdatingLocation()
         if CLLocationManager.headingAvailable() {
             manager.startUpdatingHeading()
@@ -149,7 +149,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         }
 
         previousSample = (location, location.timestamp)
-        filteredSpeedMs = (filteredSpeedMs * 0.65) + (speedMs * 0.35)
+        filteredSpeedMs = (filteredSpeedMs * 0.5) + (speedMs * 0.5)
 
         if filteredSpeedMs < stationarySpeedMs {
             applyStationarySpeed()
@@ -302,6 +302,15 @@ struct MapView: View {
                 speedLimitService.update(for: location)
                 speedCameraService.update(for: location, heading: navigationHeading)
                 updateNavigationProgress(for: location)
+                withAnimation(.smooth(duration: 0.95)) {
+                    followUserDuringNavigation(at: location, animated: false)
+                }
+            }
+            .onChange(of: locationManager.deviceHeading) { _, heading in
+                guard appManager.isNavigating, let location = locationManager.currentLocation else { return }
+                withAnimation(.smooth(duration: 0.4)) {
+                    followUserDuringNavigation(at: location, animated: false)
+                }
             }
             .onChange(of: colorScheme) { _, _ in
                 guard mapStyleMode == .theme else { return }
@@ -329,7 +338,6 @@ struct MapView: View {
                 .padding(.top, 8)
             Spacer()
         }
-        .safeAreaPadding(.top)
     }
 
     @ViewBuilder
@@ -339,7 +347,6 @@ struct MapView: View {
                 .padding(.trailing, 16)
                 .padding(.top, 8 + mapBarHeight + 8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .safeAreaPadding(.top)
         }
     }
 
@@ -350,7 +357,6 @@ struct MapView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8 + mapBarHeight + 8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .safeAreaPadding(.top)
         }
     }
 
@@ -451,10 +457,8 @@ struct MapView: View {
         }
         .mapStyle(mapStyleMode.style(showsTraffic: true))
         .mapControls { }
-        .onMapCameraChange(frequency: .onEnd) { _ in
-            // During navigation the 60fps timer owns the camera — ignore gesture-end events
-            guard !appManager.isNavigating else { return }
-            if !isProgrammaticCameraMove {
+        .onMapCameraChange(frequency: .onEnd) { context in
+            if context.isUserInitiated {
                 userControlsCamera = true
             }
         }
@@ -481,10 +485,7 @@ struct MapView: View {
         }
 
         if let route = activeRoute {
-            MapPolyline(route.polyline)
-                .stroke(.white, style: routeOutlineStroke)
-            MapPolyline(route.polyline)
-                .stroke(Color(red: 0.0, green: 0.478, blue: 1.0), style: routeFillStroke)
+            MapPolyline(route)
         }
     }
 
@@ -979,7 +980,7 @@ struct MapView: View {
         guard routeInfo != nil else { return }
         closeMapStyleMenu()
         userControlsCamera = false
-        isNavigation3D = true
+        isNavigation3D = false
         currentStepIndex = 0
         distanceToNextStepM = 0
         navigationStartDate = Date()
@@ -998,21 +999,13 @@ struct MapView: View {
 
         if let location = locationManager.currentLocation {
             speedLimitService.update(for: location)
-            followUserDuringNavigation(at: location, animated: true)
-        }
-
-        headingTimer?.invalidate()
-        headingTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
-            DispatchQueue.main.async {
-                guard let location = locationManager.currentLocation else { return }
-                self.followUserDuringNavigation(at: location)
+            withAnimation(.smooth(duration: 0.95)) {
+                followUserDuringNavigation(at: location)
             }
         }
     }
 
     private func stopNavigation() {
-        headingTimer?.invalidate()
-        headingTimer = nil
         isProgrammaticCameraMove = false
         navigationStartDate = nil
         currentStepIndex = 0
@@ -1029,13 +1022,13 @@ struct MapView: View {
         guard !userControlsCamera else { return }
 
         let heading = resolvedNavigationHeading(for: location)
-        let pitch    = isNavigation3D ? 50.0  : 0.0
-        let distance = isNavigation3D ? 220.0 : 600.0
-        // Offset center forward so user dot sits in lower third of screen
+        let pitch    = isNavigation3D ? 45.0  : 0.0
+        let distance = isNavigation3D ? 180.0 : 600.0
+        // Offset center forward so user dot sits beautifully in view
         let center = offsetCoordinate(
             from: location.coordinate,
             bearing: heading,
-            distanceMeters: isNavigation3D ? 70 : 0
+            distanceMeters: isNavigation3D ? 30.0 : 0.0
         )
 
         let camera = MapCamera(
@@ -1045,11 +1038,7 @@ struct MapView: View {
             pitch: pitch
         )
 
-        if animated {
-            withAnimation(MapAnimation.navigation) { cameraPosition = .camera(camera) }
-        } else {
-            cameraPosition = .camera(camera)
-        }
+        cameraPosition = .camera(camera)
     }
 
     private func resolvedNavigationHeading(for location: CLLocation) -> CLLocationDirection {
@@ -1060,19 +1049,12 @@ struct MapView: View {
             target = location.course
         } else if locationManager.deviceHeading >= 0 {
             target = locationManager.deviceHeading
-        } else if navigationHeading > 0 {
-            target = navigationHeading
         } else {
-            target = 0
+            target = navigationHeading
         }
 
-        return smoothHeading(toward: target)
-    }
-
-    private func smoothHeading(toward target: CLLocationDirection) -> CLLocationDirection {
-        let delta = ((target - navigationHeading + 540).truncatingRemainder(dividingBy: 360)) - 180
-        navigationHeading = (navigationHeading + delta * 0.32 + 360).truncatingRemainder(dividingBy: 360)
-        return navigationHeading
+        navigationHeading = target
+        return target
     }
 
     private func offsetCoordinate(
@@ -1136,8 +1118,14 @@ struct MapView: View {
         guard let route = activeRoute else { return "" }
         let steps = route.steps
         guard currentStepIndex < steps.count else { return "" }
-        let instr = steps[currentStepIndex].instructions
-        return instr.isEmpty ? "Procedi dritto" : instr
+        let nextIndex = currentStepIndex + 1
+        if nextIndex < steps.count {
+            let instr = steps[nextIndex].instructions
+            return instr.isEmpty ? "Procedi dritto" : instr
+        } else {
+            let instr = steps[currentStepIndex].instructions
+            return instr.isEmpty ? "Arrivo a destinazione" : instr
+        }
     }
 
     private var maneuverIcon: String {

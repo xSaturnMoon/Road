@@ -26,7 +26,7 @@ final class SpeedLimitService: ObservableObject {
         if let last = lastCoordinate, let lastTime = lastFetchAt {
             let moved = CLLocation(latitude: last.latitude, longitude: last.longitude)
                 .distance(from: location)
-            if moved < minMoveMeters, Date().timeIntervalSince(lastTime) < minFetchInterval {
+            if moved < minMoveMeters || Date().timeIntervalSince(lastTime) < minFetchInterval {
                 return
             }
         }
@@ -66,8 +66,8 @@ final class SpeedLimitService: ObservableObject {
         let query = """
         [out:json][timeout:10];
         (
-          way(around:40,\(lat),\(lon))["highway"]["maxspeed"];
-          way(around:40,\(lat),\(lon))["highway"];
+          way(around:60,\(lat),\(lon))["highway"]["maxspeed"];
+          way(around:60,\(lat),\(lon))["highway"];
         );
         out tags;
         """
