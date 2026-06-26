@@ -48,8 +48,8 @@ private enum MapAnimation {
 }
 
 private let mapBarHeight: CGFloat = 44
-private let routeOutlineStroke = StrokeStyle(lineWidth: 7, lineCap: .round, lineJoin: .round)
-private let routeFillStroke   = StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round)
+private let routeOutlineStroke = StrokeStyle(lineWidth: 5,   lineCap: .round, lineJoin: .round)
+private let routeFillStroke   = StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round)
 
 // MARK: - Location Manager
 
@@ -73,7 +73,7 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         manager.activityType = .automotiveNavigation
-        manager.distanceFilter = kCLDistanceFilterNone
+        manager.distanceFilter = 5
         manager.headingFilter = 1
         manager.requestWhenInUseAuthorization()
     }
@@ -149,7 +149,8 @@ final class LocationManager: NSObject, ObservableObject, CLLocationManagerDelega
         }
 
         previousSample = (location, location.timestamp)
-        filteredSpeedMs = (filteredSpeedMs * 0.5) + (speedMs * 0.5)
+        // Fast-responding EMA — 0.2 old + 0.8 new gives near-instant updates
+        filteredSpeedMs = (filteredSpeedMs * 0.2) + (speedMs * 0.8)
 
         if filteredSpeedMs < stationarySpeedMs {
             applyStationarySpeed()
@@ -254,24 +255,25 @@ struct MapView: View {
             searchResultsOverlay
             routeOverlay
             routeWarningOverlay
-            speedCameraAlertOverlay
-            // Navigation bottom bar + 2D/3D toggle
+            // Navigation bottom overlay
             if appManager.isNavigating {
-                VStack {
+                VStack(spacing: 0) {
                     Spacer()
-                    HStack(alignment: .bottom) {
-                        perspectiveToggleButton
-                        Spacer()
-                        currentSpeedButton
+                    // Speed camera alert above bottom bar
+                    if let alert = speedCameraService.activeAlert {
+                        speedCameraAlertBanner(alert)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
                     navigationBottomBar
                         .padding(.horizontal, 12)
                         .padding(.bottom, 4)
+                        .safeAreaPadding(.bottom)
                 }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(MapAnimation.spring, value: appManager.isNavigating)
+                .animation(MapAnimation.spring, value: speedCameraService.activeAlert != nil)
             }
         }
         return view
@@ -302,15 +304,6 @@ struct MapView: View {
                 speedLimitService.update(for: location)
                 speedCameraService.update(for: location, heading: navigationHeading)
                 updateNavigationProgress(for: location)
-                withAnimation(.smooth(duration: 0.95)) {
-                    followUserDuringNavigation(at: location, animated: false)
-                }
-            }
-            .onChange(of: locationManager.deviceHeading) { _, heading in
-                guard appManager.isNavigating, let location = locationManager.currentLocation else { return }
-                withAnimation(.smooth(duration: 0.4)) {
-                    followUserDuringNavigation(at: location, animated: false)
-                }
             }
             .onChange(of: colorScheme) { _, _ in
                 guard mapStyleMode == .theme else { return }
@@ -335,9 +328,10 @@ struct MapView: View {
         VStack(spacing: 0) {
             topBar
                 .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.top, 4)
             Spacer()
         }
+        .safeAreaPadding(.top)
     }
 
     @ViewBuilder
@@ -347,6 +341,7 @@ struct MapView: View {
                 .padding(.trailing, 16)
                 .padding(.top, 8 + mapBarHeight + 8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .safeAreaPadding(.top)
         }
     }
 
@@ -357,6 +352,7 @@ struct MapView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8 + mapBarHeight + 8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .safeAreaPadding(.top)
         }
     }
 
@@ -457,7 +453,9 @@ struct MapView: View {
         }
         .mapStyle(mapStyleMode.style(showsTraffic: true))
         .mapControls { }
-        .onMapCameraChange(frequency: .onEnd) { (context: MapCameraUpdateContext) in
+        .onMapCameraChange(frequency: .onEnd) { _ in
+            // During navigation the 60fps timer owns the camera — ignore gesture-end events
+            guard !appManager.isNavigating else { return }
             if !isProgrammaticCameraMove {
                 userControlsCamera = true
             }
@@ -485,7 +483,10 @@ struct MapView: View {
         }
 
         if let route = activeRoute {
-            MapPolyline(route)
+            MapPolyline(route.polyline)
+                .stroke(.white, style: routeOutlineStroke)
+            MapPolyline(route.polyline)
+                .stroke(Color(red: 0.0, green: 0.478, blue: 1.0), style: routeFillStroke)
         }
     }
 
@@ -526,8 +527,12 @@ struct MapView: View {
                         }
                     }
 
-                    mapToolButton(icon: "square.3.layers.3d", isActive: showMapStyleMenu) {
-                        toggleMapStyleMenu()
+                    if appManager.isNavigating {
+                        perspectiveToggleButton
+                    } else {
+                        mapToolButton(icon: "square.3.layers.3d", isActive: showMapStyleMenu) {
+                            toggleMapStyleMenu()
+                        }
                     }
                 }
             }
@@ -999,13 +1004,21 @@ struct MapView: View {
 
         if let location = locationManager.currentLocation {
             speedLimitService.update(for: location)
-            withAnimation(.smooth(duration: 0.95)) {
-                followUserDuringNavigation(at: location)
+            followUserDuringNavigation(at: location, animated: true)
+        }
+
+        headingTimer?.invalidate()
+        headingTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { _ in
+            DispatchQueue.main.async {
+                guard let location = locationManager.currentLocation else { return }
+                self.followUserDuringNavigation(at: location)
             }
         }
     }
 
     private func stopNavigation() {
+        headingTimer?.invalidate()
+        headingTimer = nil
         isProgrammaticCameraMove = false
         navigationStartDate = nil
         currentStepIndex = 0
@@ -1022,13 +1035,12 @@ struct MapView: View {
         guard !userControlsCamera else { return }
 
         let heading = resolvedNavigationHeading(for: location)
-        let pitch    = isNavigation3D ? 45.0  : 0.0
-        let distance = isNavigation3D ? 180.0 : 600.0
-        // Offset center forward so user dot sits beautifully in view
+        let pitch    = isNavigation3D ? 42.0  : 0.0
+        let distance = isNavigation3D ? 400.0 : 600.0
         let center = offsetCoordinate(
             from: location.coordinate,
             bearing: heading,
-            distanceMeters: isNavigation3D ? 30.0 : 0.0
+            distanceMeters: isNavigation3D ? 100 : 0
         )
 
         let camera = MapCamera(
@@ -1038,7 +1050,11 @@ struct MapView: View {
             pitch: pitch
         )
 
-        cameraPosition = .camera(camera)
+        if animated {
+            withAnimation(MapAnimation.navigation) { cameraPosition = .camera(camera) }
+        } else {
+            cameraPosition = .camera(camera)
+        }
     }
 
     private func resolvedNavigationHeading(for location: CLLocation) -> CLLocationDirection {
@@ -1049,12 +1065,19 @@ struct MapView: View {
             target = location.course
         } else if locationManager.deviceHeading >= 0 {
             target = locationManager.deviceHeading
-        } else {
+        } else if navigationHeading > 0 {
             target = navigationHeading
+        } else {
+            target = 0
         }
 
-        navigationHeading = target
-        return target
+        return smoothHeading(toward: target)
+    }
+
+    private func smoothHeading(toward target: CLLocationDirection) -> CLLocationDirection {
+        let delta = ((target - navigationHeading + 540).truncatingRemainder(dividingBy: 360)) - 180
+        navigationHeading = (navigationHeading + delta * 0.32 + 360).truncatingRemainder(dividingBy: 360)
+        return navigationHeading
     }
 
     private func offsetCoordinate(
@@ -1117,22 +1140,24 @@ struct MapView: View {
     private var currentInstruction: String {
         guard let route = activeRoute else { return "" }
         let steps = route.steps
-        guard currentStepIndex < steps.count else { return "" }
+        // Show the NEXT maneuver (Apple Maps style: "Turn left in 300m")
         let nextIndex = currentStepIndex + 1
-        if nextIndex < steps.count {
-            let instr = steps[nextIndex].instructions
-            return instr.isEmpty ? "Procedi dritto" : instr
-        } else {
-            let instr = steps[currentStepIndex].instructions
-            return instr.isEmpty ? "Arrivo a destinazione" : instr
+        guard nextIndex < steps.count else {
+            return steps.last?.instructions ?? "Arrivi a destinazione"
         }
+        let instr = steps[nextIndex].instructions
+        return instr.isEmpty ? "Procedi dritto" : instr
     }
 
     private var maneuverIcon: String {
-        let t = currentInstruction.lowercased()
-        if t.contains("rotonda") || t.contains("roundabout")   { return "arrow.triangle.turn.up.right.circle" }
+        guard let route = activeRoute else { return "arrow.up" }
+        let steps = route.steps
+        let nextIndex = currentStepIndex + 1
+        guard nextIndex < steps.count else { return "flag.checkered" }
+        let t = steps[nextIndex].instructions.lowercased()
+        if t.contains("rotonda") || t.contains("roundabout")            { return "arrow.triangle.turn.up.right.circle" }
         if t.contains("leggermente a sinistra") || t.contains("slight left") { return "arrow.turn.up.left" }
-        if t.contains("leggermente a destra") || t.contains("slight right")  { return "arrow.turn.up.right" }
+        if t.contains("leggermente a destra")  || t.contains("slight right") { return "arrow.turn.up.right" }
         if t.contains("sinistra") || t.contains("left")  { return "arrow.turn.up.left" }
         if t.contains("destra")   || t.contains("right") { return "arrow.turn.up.right" }
         if t.contains("destinazione") || t.contains("destination") || t.contains("arriva") { return "flag.checkered" }
